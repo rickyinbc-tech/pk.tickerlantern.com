@@ -16,6 +16,11 @@ async function page(url){w=await load(url);d=w.document;watch();await until(()=>
 // Resolves on a new result event (even when inputs are unchanged) or on a validation error.
 async function analyze(){const n=resultCount;$('error').textContent='';$('calculate').click();await until(()=>resultCount>n||txt('error'));await sleep(0)}
 const mode=()=>$('kSync').dataset.mode;
+const szMode=()=>$('szStatus').dataset.mode;
+const szOut=k=>$('szCards').querySelector(`.sz-card[data-key="${k}"] .sz-out`).textContent;
+const szAmt=k=>$('szCards').querySelector(`.sz-card[data-key="${k}"] .sz-amt`).textContent;
+const szNote=k=>$('szCards').querySelector(`.sz-card[data-key="${k}"] .sz-note`).textContent;
+const szIn=(id,v)=>set(id,v,'input');
 const handView=()=>`mode=${mode()} p=${$('kP').value} b=${$('kB').value} source=${txt('kSource')}`;
 // Outcome-table helpers: rows carry data-kind / data-n; signed numbers use “−”.
 const num=t=>parseFloat(String(t).replace(/−/g,'-').replace(/,/g,''));
@@ -40,6 +45,8 @@ function unnamedControls(doc){return [...doc.querySelectorAll('.setup input,.set
 async function run(){
  /* ---------- English: calculator ---------- */
  await page('/index.html');
+ check('page has no duplicate IDs',new Set([...d.querySelectorAll('[id]')].map(el=>el.id)).size===d.querySelectorAll('[id]').length);
+ check('bet comparison body is not accidentally bold',Number(w.getComputedStyle($('bet-comparison')).fontWeight)<700,w.getComputedStyle($('bet-comparison')).fontWeight);
  check('default Kelly fraction 10.0% (p 55%, b 1)',txt('kFull')==='10.0%',txt('kFull'));
  check('default table has 4 strategies',$('kTable').rows.length===5&&!$('kTable').hidden,$('kTable').rows.length);
  check('full Kelly stake 200 of 2,000',$('kTable').rows[3].cells[2].textContent==='200',$('kTable').rows[3].cells[2].textContent);
@@ -155,6 +162,78 @@ async function run(){
  set('call','100');await analyze();check('facing a bet again resyncs',mode()==='synced',handView());
  $('example').click();check('loading the example clears the sync',mode()==='stale',handView());
 
+ /* ---------- Bet sizing comparison (heads-up, postflop, no bet to call) ---------- */
+ set('rake','0');set('rakeCap','');set('opponents','1');
+ check('sizing: hidden until a current analysis exists',['none','stale'].includes(szMode())&&$('szBody').hidden,szMode());
+ await hand('Ah Kd','As 7c 2d',100,0,200,{range:30,bb:2});
+ check('sizing: ready for heads-up postflop with no bet',szMode()==='ready'&&!$('szBody').hidden&&txt('szStatus').includes('your own assumption'),szMode());
+ check('sizing: context from the analysis with minimum bet = 1 big blind',txt('szContext').includes('pot 100 · effective stack 200 · minimum bet 2 (assumed = 1 big blind)'),txt('szContext'));
+ check('sizing: legal sizes ⅓, ½, ¾, pot and all-in',szAmt('33')==='33.33 chips'&&szAmt('50')==='50 chips'&&szAmt('75')==='75 chips'&&szAmt('100')==='100 chips'&&szAmt('allin')==='200 chips · all-in',[szAmt('33'),szAmt('allin')]);
+ check('sizing: nothing assumed by default',['33','50','75','100','allin'].every(k=>szOut(k).includes('Enter both assumptions'))&&txt('szResult').includes('No option has complete assumptions')&&szOut('check').includes('Enter your equity if you check'),txt('szResult'));
+ check('sizing: no fold rate or equity pre-filled',[...$('szCards').querySelectorAll('input')].every(i=>i.value===''),'prefilled');
+ szIn('szEqCheck','50');szIn('szF-50','30');szIn('szE-50','40');
+ check('sizing: check EV = 0.5 × 100 = +50',szOut('check').includes('0.5 × 100 = +50'),szOut('check'));
+ check('sizing: known EV 0.3 × 100 + 0.7 × [0.4 × (100 + 2 × 50) − 50] = +51',szOut('50').includes('0.3 × 100 + 0.7 × [0.4 × (100 + 2 × 50) − 50] = 0.3 × 100 + 0.7 × +30 = +51'),szOut('50'));
+ check('sizing: vs check +1 and break-even fold 28.6%',szOut('50').includes('vs check: +1')&&szOut('50').includes('at least 28.6%'),szOut('50'));
+ check('sizing: best is only among tested options, not optimal',txt('szResult').includes('Highest modelled EV among the options you completed: ½ pot (50) at +51')&&txt('szResult').includes('not an optimal bet'),txt('szResult'));
+ szIn('szF-33','0');szIn('szE-33','40');
+ check('sizing: 0% folds = called EV only (+33.33)',szOut('33').includes('= +33.33'),szOut('33'));
+ szIn('szF-75','100');szIn('szE-75','0');
+ check('sizing: 100% folds = the whole pot (+100)',szOut('75').includes('= +100')&&txt('szResult').includes('¾ pot (75) at +100'),szOut('75'));
+ szIn('szF-100','0');szIn('szE-100','20');
+ check('sizing: negative EV shown with a minus sign (−40)',szOut('100').includes('= −40')&&szOut('100').includes('vs check: −90'),szOut('100'));
+ check('sizing: sensitivity to fold assumptions shown',txt('szResult').includes('10 points lower')&&szOut('50').includes('Each +10 points of fold rate'),txt('szResult'));
+ szIn('szF-50','120');
+ check('sizing: invalid fold % rejected and excluded',szOut('50').includes('from 0 to 100')&&txt('szResult').includes('Not compared')&&txt('szResult').includes('½ pot'),szOut('50'));
+ szIn('szF-50','30');
+ szIn('szCustom','250');check('sizing: custom above the stack is an error, not silently capped',szNote('custom').includes('more than your 200 effective stack')&&$('szF-custom').disabled,szNote('custom'));
+ szIn('szCustom','1');check('sizing: custom below the minimum bet is an error',szNote('custom').includes('below the 2 minimum bet'),szNote('custom'));
+ szIn('szCustom','40.1234');check('sizing: fractional custom amount is displayed without rounding away precision',szAmt('custom')==='40.1234 chips',szAmt('custom'));
+ szIn('szCustom','40');szIn('szF-custom','25');szIn('szE-custom','50');
+ check('sizing: custom bet computed (+62.5)',szAmt('custom')==='40 chips'&&szOut('custom').includes('= +62.5'),szOut('custom'));
+ $('szFill').click();
+ check('sizing: copy fills only empty equity fields and marks them',$('szE-allin').value===String(Number(num(txt('equity')).toFixed(1)))&&$('szE-allin').dataset.origin==='copied'&&$('szEqCheck').value==='50'&&!$('szEqCheck').dataset.origin,$('szE-allin').value+' vs '+txt('equity'));
+ check('sizing: copy never fills fold rates',$('szF-allin').value===''&&txt('szFillNote').includes('Fold rates were not filled'),$('szF-allin').value);
+ szIn('szF-allin','10');check('sizing: copied caller equity flagged as optimistic',szOut('allin').includes('probably optimistic'),szOut('allin'));
+ szIn('szE-allin','45');check('sizing: editing a copied value makes it yours',!$('szE-allin').dataset.origin&&!szOut('allin').includes('probably optimistic'),szOut('allin'));
+ szIn('szE-allin','');$('szFill').click();
+ await analyze();check('sizing: re-analysis clears copied assumptions and copy notice',$('szE-allin').value===''&&!$('szE-allin').dataset.origin&&txt('szFillNote')==='',txt('szFillNote'));
+ $('szFill').click();
+ szIn('szMin','40');check('sizing: minimum bet blocks smaller sizes',szNote('33').includes('below the 40 minimum bet')&&$('szF-33').disabled,szNote('33'));
+ szIn('szMin','-1');check('sizing: invalid minimum bet rejected',txt('szMinError').length>0,txt('szMinError'));szIn('szMin','');
+ check('sizing: no rake note when no rake',$('szRake').hidden);
+ // Hand changes clear the comparison; your own entries stay, copied equity goes; a new analysis recomputes.
+ set('stack','60');
+ check('sizing: changed stack clears the comparison',szMode()==='stale'&&$('szBody').hidden&&txt('szStatus').includes('cleared'),szMode());
+ check('sizing: your entries kept, copied equity removed',$('szF-50').value==='30'&&$('szE-50').value==='40'&&$('szE-allin').value===''&&!$('szE-allin').dataset.origin,$('szE-allin').value);
+ await analyze();
+ check('sizing: stack 60 merges ¾ and pot into all-in',szMode()==='ready'&&szAmt('allin')==='60 chips · all-in'&&szNote('allin').includes('¾ pot, Pot-size bet')&&szNote('75').includes('Same as all-in')&&$('szF-75').disabled,szNote('allin'));
+ check('sizing: recomputed with kept entries',szOut('50').includes('= +51'),szOut('50'));
+ set('stack','1.5');await analyze();
+ check('sizing: short all-in below the minimum bet explained',szAmt('allin')==='1.5 chips · all-in'&&szNote('allin').includes('Short all-in')&&szNote('allin').includes('rules'),szNote('allin'));
+ set('stack','200');set('pot','150');await analyze();
+ check('sizing: changed pot updates sizes',szAmt('50')==='75 chips'&&txt('szContext').includes('pot 150'),szAmt('50'));
+ set('rake','5');await analyze();check('sizing: rake not applied, and says so',!$('szRake').hidden&&txt('szRake').includes('not applied'),txt('szRake'));
+ set('rake','0');set('call','50');await analyze();
+ check('sizing: facing a bet uses call/fold instead',szMode()==='facing'&&$('szBody').hidden&&txt('szStatus').includes('does not apply'),txt('szStatus'));
+ set('call','0');set('opponents','2');await analyze();
+ check('sizing: multiway not modelled',szMode()==='multiway'&&$('szBody').hidden,txt('szStatus'));
+ set('opponents','1');set('boardText','');await analyze();
+ check('sizing: preflop not modelled',szMode()==='preflop'&&$('szBody').hidden,txt('szStatus'));
+ set('boardText','As 7c 2d');set('pot','100');await analyze();$('szFill').click();
+ check('sizing: ready again',szMode()==='ready'&&$('szE-75').value==='0',szMode());
+ // Language switch keeps your own assumptions, drops copied equity, and recalculates.
+ let szLoaded=new Promise(res=>frame.onload=res);d.querySelector('.languages a[href="zh.html"]').click();await szLoaded;
+ w=frame.contentWindow;d=w.document;watch();await until(()=>w.Sizing&&szMode()==='ready'||(w.Sizing&&txt('error')));
+ check('sizing zh: recalculated after switching',szMode()==='ready'&&txt('szStatus').startsWith('單挑、翻牌後'),txt('szStatus'));
+ check('sizing zh: your entries kept, copied equity dropped',$('szF-50').value==='30'&&$('szE-50').value==='40'&&$('szEqCheck').value==='50'&&$('szE-allin').value==='',[$('szF-50').value,$('szE-allin').value]);
+ check('sizing zh: same EV, translated wording',szOut('50').includes('= +51')&&szOut('50').includes('與過牌比較：+1')&&txt('szResult').includes('並非最佳下注'),szOut('50'));
+ check('sizing zh: no untranslated English',!/[A-Za-z]{4,}/.test(txt('szStatus')+txt('szResult')+txt('szContext')+$('szCards').textContent),txt('szResult'));
+ set('pot','120');check('sizing zh: change clears',szMode()==='stale'&&txt('szStatus').includes('已清除'),txt('szStatus'));
+ szLoaded=new Promise(res=>frame.onload=res);d.querySelector('.languages a[href="index.html"]').click();await szLoaded;
+ w=frame.contentWindow;d=w.document;watch();await until(()=>w.Sizing&&txt('kFull'));await sleep(300);
+ check('sizing: switch without a current result starts cleared, entries kept',szMode()==='none'&&$('szBody').hidden&&$('szF-50').value==='30',szMode());
+
  /* ---------- Language switch ---------- */
  set('kP','57','input');set('kB','1','input');
  await hand('Js Jh','Qd 7c 2s',150,100,100,{range:20,kBankroll:5000,kCap:400,rake:5,rakeCap:3});
@@ -193,7 +272,7 @@ async function run(){
  check('zh note: win/tie/equity separately',zn.includes('獨贏')&&zn.includes('平手')&&zn.includes('攤牌權益'),zn);
  check('zh note: no partial call',zn.includes('不能只跟注一部分'),zn);
  check('zh exposure line',txt('kExposure').includes('撲克資金'),txt('kExposure'));
- check('zh teaching section present',d.querySelector('.kelly-teach').textContent.includes('權益不等於勝出機率'));
+ check('zh teaching section present',d.querySelector('.kelly .kelly-teach').textContent.includes('權益不等於勝出機率'));
  check('no untranslated English in zh Kelly output',!/[A-Za-z]{4,}/.test(txt('kVerdict')+txt('kExposure')+txt('kSync')+txt('kSource')+txt('kWorked')+txt('kFormula')+$('kOutcomes').textContent+zn),txt('kVerdict'));
  await hand('2h 3h','Ts Js Qs Ks As',100,50,50,{range:100});
  check('zh royal board: exact 100% and model-property wording',txt('kFull')==='100.0%'&&txt('kVerdict').startsWith('精確計算顯示')&&txt('kVerdict').includes('並不是建議'),txt('kVerdict'));
@@ -214,6 +293,13 @@ async function run(){
    check(`${tag}: example, clear-board and manual buttons ≥ 44 px tall`,sizes.every(([,w,h])=>h>=44&&w>=44),JSON.stringify(sizes));
    const unnamed=unnamedControls(d);check(`${tag}: every control has an accessible name`,!unnamed.length,unnamed.join(', '));
    check(`${tag}: no horizontal scrolling`,d.documentElement.scrollWidth<=w.innerWidth,d.documentElement.scrollWidth+' > '+w.innerWidth);
+   await hand('Ah Kd','As 7c 2d',100,0,200,{range:30});szIn('szEqCheck','50');szIn('szF-50','30');szIn('szE-50','40');szIn('szCustom','999');$('szFill').click();
+   const sf=contrastFailures(d);check(`${tag}: bet comparison passes contrast`,szMode()==='ready'&&!sf.length,sf.join('; '));
+   const fill=$('szFill').getBoundingClientRect();check(`${tag}: copy button ≥ 44 px tall`,fill.height>=44,fill.height);
+   const un2=unnamedControls(d).concat([...d.querySelectorAll('#bet-comparison input')].filter(i=>!(i.getAttribute('aria-label')||(i.closest('label')&&i.closest('label').textContent.trim()))).map(i=>i.id));
+   check(`${tag}: bet comparison inputs are named`,!un2.length,un2.join(', '));
+   check(`${tag}: bet comparison fits without horizontal scrolling`,d.documentElement.scrollWidth<=w.innerWidth,d.documentElement.scrollWidth+' > '+w.innerWidth);
+   szIn('szCustom','');
   }
  }
  frame.style.width='1200px';

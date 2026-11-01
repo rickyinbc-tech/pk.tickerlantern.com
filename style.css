@@ -15,3 +15,12 @@
 /* Comfortable tap targets for the text-style buttons (WCAG 2.5.8 asks for at least 24 px; 44 px matches touch guidance). */
 .text-button{min-height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:flex-end;padding:0 2px}.text-button.left{justify-content:flex-start;padding:0}.secondary{min-height:44px}
 .k-group{margin-top:18px}.k-group-title{font-size:12px;font-weight:700;color:#365c4d;margin:0 0 10px}.k-group-title small{display:block;font-weight:400;margin-top:3px}.outcomes{margin:0 0 12px}.outcomes tr.total td{font-weight:700;border-top:1px solid #cfe0cf}.outcomes caption{font-size:11px;color:#4f6a5d;text-align:left;padding-top:8px;line-height:1.5}
+/* Check-versus-bet comparison */
+.bet-comparison{margin-top:22px}.sz-context{font-size:12px;line-height:1.6;color:#355c4c;background:#f7faf5;border-radius:9px;padding:10px 14px;margin:0 0 16px}
+.sz-controls{display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr);gap:16px;align-items:start}.sz-controls label{display:block;font-size:12px;font-weight:700;color:#365c4d}.sz-fill{padding-top:22px}
+.sz-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:16px}
+.sz-card{border:1px solid #dce5db;border-radius:12px;padding:12px 14px 14px;margin:0;min-width:0;background:#fff}.sz-card[data-key="check"]{background:#f7faf5}.sz-card legend{padding:0 6px;font-size:13px;font-weight:700;color:#183d38}.sz-card .sz-amt{font-weight:500;color:#4f6a5d}
+.sz-card.blocked{background:#f4f6f3;border-style:dashed}.sz-inputs{display:grid;grid-template-columns:1fr 1fr;gap:10px}.sz-inputs label{display:block;font-size:11px;font-weight:700;color:#365c4d}.sz-inputs input{height:40px}
+.sz-note{font-size:12px;line-height:1.5;color:#6b4a35;margin:8px 0 0}.sz-out p{font-size:12px;line-height:1.6;color:#355c4c;margin:8px 0 0}.sz-out:empty{display:none}.sz-out .formula{font-size:11px!important;word-break:break-word}
+.sz-result{margin-top:16px;background:#eaf3e9;border-radius:12px;padding:12px 16px}.sz-result p{font-size:13px;line-height:1.65;color:#1f5440;margin:4px 0}.sz-result p:first-child{font-weight:700}.sz-result:empty{display:none}
+@media(max-width:520px){.sz-controls{grid-template-columns:1fr}.sz-fill{padding-top:0}.sz-cards{grid-template-columns:1fr}}

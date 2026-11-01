@@ -110,15 +110,47 @@ const ws=simulate(wheel,wb,1,40000,rng);evCheck(ws,100,50);assert(Math.abs(ws.eq
 for(const [opp,range,pot,call,rakeAmt] of [[2,100,120,40,6],[3,30,200,80,0],[4,100,90,30,3]]){const r=simulate([c(10,0),c(10,1)],[c(10,2),c(4,1),c(4,3)],opp,8000,rng,{range});evCheck(r,pot,call,rakeAmt,`${opp} opp`)}
 for(let t=0;t<200;t++){const d=[...Array(52).keys()];for(let i=0;i<7;i++){const j=i+Math.floor(rng()*(52-i));[d[i],d[j]]=[d[j],d[i]]}evCheck(enumerateHeadsUp(d.slice(0,2),d.slice(2,7)),50+Math.floor(rng()*200),10+Math.floor(rng()*60),Math.floor(rng()*5))}
 
+// Check-versus-bet comparison: EV(bet) = F·P + (1 − F)·[e·(P + 2B) − B], EV(check) = e_check·P; no rake, no raises, no later betting.
+const SZm=require('./sizing.js');
+near(SZm.betEV({pot:100,bet:50,fold:.3,eqCall:.4}),51);near(SZm.checkEV({pot:100,eqCheck:.5}),50);// 0.3×100 + 0.7×(0.4×200 − 50)
+near(SZm.betEV({pot:100,bet:50,fold:0,eqCall:.4}),30);near(SZm.betEV({pot:100,bet:50,fold:1,eqCall:.4}),100);// 0% folds: only the called EV; 100%: the pot
+near(SZm.betEV({pot:100,bet:100,fold:0,eqCall:.2}),-40);near(SZm.betEV({pot:100,bet:100,fold:0,eqCall:1}),200);
+near(SZm.betEV({pot:150,bet:75,fold:.25,eqCall:.6}),.25*150+.75*(.6*300-75));
+const pureBluff=SZm.breakEvenFold({pot:100,bet:50,eqCall:0,check:0});assert.equal(pureBluff.kind,'atLeast');near(pureBluff.fold,50/150);// B/(P + B)
+const wantCall=SZm.breakEvenFold({pot:100,bet:100,eqCall:.9,check:150});assert.equal(wantCall.kind,'atMost');near(wantCall.fold,(150-170)/(100-170));
+assert.equal(SZm.breakEvenFold({pot:100,bet:50,eqCall:.1,check:120}).kind,'never');assert.equal(SZm.breakEvenFold({pot:100,bet:100,eqCall:.9,check:90}).kind,'always');
+for(let i=0;i<200;i++){const pot=1+200*rng(),bet=.5+300*rng(),eqCall=rng(),check=pot*rng(),be=SZm.breakEvenFold({pot,bet,eqCall,check});
+ if(be.kind==='atLeast'||be.kind==='atMost'){near(SZm.betEV({pot,bet,fold:be.fold,eqCall}),check,1e-7);assert(be.fold>=0&&be.fold<=1)}
+ near(SZm.foldSlope(pot,bet,eqCall)*10,SZm.betEV({pot,bet,fold:1,eqCall})-SZm.betEV({pot,bet,fold:0,eqCall}),1e-9)}
+for(const bad of [{fold:1.2},{fold:-.1},{eqCall:1.01},{eqCall:NaN},{bet:0},{pot:0},{fold:NaN}])assert(Number.isNaN(SZm.betEV({pot:100,bet:50,fold:.3,eqCall:.4,...bad})),JSON.stringify(bad));
+assert(Number.isNaN(SZm.checkEV({pot:100,eqCheck:1.5})));
+// Legal sizes: capped at the effective stack (merged into all-in), below-minimum sizes blocked, short all-in allowed.
+const cA=SZm.candidates({pot:100,stack:60,minBet:2}).rows;
+assert.deepEqual(cA.map(r=>[r.key,r.status,r.bet]),[['33','ok',33.33],['50','ok',50],['75','merged',undefined],['100','merged',undefined],['allin','ok',60]]);assert.deepEqual(cA[4].mergedFrom,['75','100']);
+const cB=SZm.candidates({pot:3,stack:100,minBet:2}).rows;assert.deepEqual(cB.map(r=>r.status),['belowMin','belowMin','ok','ok','ok']);
+const cC=SZm.candidates({pot:10,stack:1.5,minBet:2}).rows;assert.deepEqual(cC.map(r=>r.status),['merged','merged','merged','merged','ok']);assert.equal(cC[4].shortAllIn,true);
+assert.equal(SZm.candidates({pot:0,stack:10,minBet:2}).error,'CONTEXT');
+assert.equal(SZm.candidates({pot:1.0053,stack:.339,minBet:.01}).rows[0].status,'merged','rounded bet must not exceed effective stack');
+assert.deepEqual(SZm.compare({pot:100,eqCheck:.50001,options:[{key:'50',bet:50,fold:0,eqCall:.500015}]}).best,['50'],'a small but real EV difference is not a tie');
+assert.equal(SZm.customBet(250,{stack:200,minBet:2}).error,'CUSTOM_OVER_STACK');assert.equal(SZm.customBet(1,{stack:200,minBet:2}).error,'CUSTOM_BELOW_MIN');
+assert.equal(SZm.customBet(0,{stack:200,minBet:2}).error,'CUSTOM_POSITIVE');assert.deepEqual(SZm.customBet(200,{stack:200,minBet:2}),{bet:200,allIn:true,status:'ok',shortAllIn:false});
+assert.equal(SZm.customBet(1.5,{stack:1.5,minBet:2}).shortAllIn,true);assert.equal(SZm.customBet(40,{stack:200,minBet:2}).bet,40);
+// Comparison: best among completed options only; ties; check missing; incomplete rows excluded.
+const cmp=SZm.compare({pot:100,eqCheck:.5,options:[{key:'50',bet:50,fold:.3,eqCall:.4},{key:'33',bet:33.33,fold:NaN,eqCall:.4},{key:'75',bet:75,fold:1,eqCall:0}]});
+assert.deepEqual(cmp.best,['75']);near(cmp.top,100);near(cmp.rows[0].vsCheck,1);assert.equal(cmp.rows[1].complete,false);
+assert.deepEqual(SZm.compare({pot:100,eqCheck:.51,options:[{key:'50',bet:50,fold:.3,eqCall:.4}]}).best,['check','50']);// 51 vs 51: a tie
+assert.deepEqual(SZm.compare({pot:100,eqCheck:NaN,options:[{key:'50',bet:50,fold:.3,eqCall:.4}]}).best,['50']);assert.deepEqual(SZm.compare({pot:100,eqCheck:NaN,options:[]}).best,[]);
+assert.equal(SZm.betEV.length,1);// one assumptions object: there is deliberately no rake or future-street parameter
+
 // Upgrade safety: every local CSS/JS reference in both pages carries one shared version; the worker reuses poker.js's URL.
 const versions=new Set();
 for(const page of ['index.html','zh.html']){const html=fs.readFileSync(path.join(__dirname,page),'utf8'),refs=[...html.matchAll(/(?:src|href)="((?:style\.css|[a-z-]+\.js)[^"]*)"/g)].map(m=>m[1]);
- assert.deepEqual(refs.map(r=>r.split('?')[0]),['style.css','poker.js','kelly.js','app.js','kelly-ui.js','language.js'],page);
+ assert.deepEqual(refs.map(r=>r.split('?')[0]),['style.css','poker.js','kelly.js','app.js','kelly-ui.js','sizing.js','sizing-ui.js','language.js'],page);
  for(const r of refs){const v=/\?v=([\w-]+)$/.exec(r);assert(v,`${page}: ${r} is not versioned`);versions.add(v[1])}}
 assert.equal(versions.size,1,'both pages must use the same asset version');
 const appSrc=fs.readFileSync(path.join(__dirname,'app.js'),'utf8');assert(/new Worker\(WORKER_URL\)/.test(appSrc)&&/WORKER_URL=document\.querySelector\('script\[src\^="poker\.js"\]'\)/.test(appSrc),'worker must load the versioned poker.js');
 
 // Deployment copy must match the source files.
-for(const f of ['index.html','zh.html','app.js','poker.js','kelly.js','kelly-ui.js','language.js','style.css'])assert.equal(fs.readFileSync(path.join(__dirname,'public',f),'utf8'),fs.readFileSync(path.join(__dirname,f),'utf8'),`public/${f} is out of date`);
-assert.deepEqual(fs.readdirSync(path.join(__dirname,'public')).sort(),['app.js','index.html','kelly-ui.js','kelly.js','language.js','poker.js','style.css','zh.html']);
+for(const f of ['index.html','zh.html','app.js','poker.js','kelly.js','kelly-ui.js','sizing.js','sizing-ui.js','language.js','style.css'])assert.equal(fs.readFileSync(path.join(__dirname,'public',f),'utf8'),fs.readFileSync(path.join(__dirname,f),'utf8'),`public/${f} is out of date`);
+assert.deepEqual(fs.readdirSync(path.join(__dirname,'public')).sort(),['app.js','index.html','kelly-ui.js','kelly.js','language.js','poker.js','sizing-ui.js','sizing.js','style.css','zh.html']);
 console.log('Evaluator, ranges, enumeration, sampling and Kelly checks: passed',{flopExact:ex.equity.toFixed(4),flopTop15:exR.equity.toFixed(4),AA:aa.equity.toFixed(3),JJ:jj.equity.toFixed(3)});

@@ -1,6 +1,6 @@
 # Poker Lantern
 
-A browser-only Texas Hold'em learning calculator with English (`index.html`) and Traditional Chinese (`zh.html`) pages. Both pages share `poker.js` (engine, also run as a Web Worker), `app.js` (hand-analysis UI with all visible text for both languages in its `TEXT` object), `kelly.js` (Kelly math) and `kelly-ui.js` (Kelly calculator UI, text in its `KT` object). The language switch carries the current hand between versions within the same browser tab.
+A browser-only Texas Hold'em learning calculator with English (`index.html`) and Traditional Chinese (`zh.html`) pages. Both pages share `poker.js` (engine, also run as a Web Worker), `app.js` (hand-analysis UI with all visible text for both languages in its `TEXT` object), `kelly.js` (Kelly math), `kelly-ui.js` (Kelly calculator UI, text in its `KT` object), `sizing.js` (check-versus-bet math) and `sizing-ui.js` (its UI, text in its `SZ` object). The language switch carries the current hand between versions within the same browser tab.
 
 Open the site through a local HTTP server (for example `python3 -m http.server --directory public`). Run `node test.js` for evaluator, range, enumeration, sampling and Kelly-formula checks; it also fails if `public/` is out of sync with the source files. Run `node test-ui.js` for browser UI checks of both language pages: it serves `public/` and `tools/ui-harness.html` on a temporary localhost port and drives them in headless Google Chrome (set `CHROME=/path/to/chrome` if Chrome is installed elsewhere).
 
@@ -12,6 +12,17 @@ Open the site through a local HTTP server (for example `python3 -m http.server -
 - **No bet to call (postflop)**: a sizing table with the fold frequency a bluff needs, B ÷ (P + B), and the equity a caller needs, B ÷ (P + 2B).
 - **Preflop opens**: a rule-of-thumb comparison of the hand's raw-equity rank with rough 6-max opening widths by seat. Pairs and suited connected hands are flagged as borderline in late position because raw equity undervalues them.
 - **Hand-type distribution** at the river (exact or estimated).
+
+## Check-versus-bet comparison (`sizing.js`, `sizing-ui.js`)
+
+A limited teaching model for one first bet into one opponent after the flop, with no bet to call. It is not a solver.
+
+- **Formulas** (incremental chips from this decision, pot P already in the middle, bet B matched by a call, no raises, no later betting, no rake): EV(bet) = F × P + (1 − F) × [e × (P + 2B) − B], and EV(check) = e_check × P (check through to showdown). Ties are already inside equity.
+- **Your assumptions, never inferred.** For each size you enter an assumed fold rate F and your equity e against the hands that would call that size, plus your equity if you check. Nothing is pre-filled. “Copy showdown equity as a starting assumption” fills only empty equity fields (never fold rates), marks them “copied”, and notes that callers are usually stronger.
+- **Sizes:** ⅓, ½, ¾ and 1× pot, plus all-in and a custom amount. Amounts are rounded to cents, and the shown amount is the computed amount. A size at or above the effective stack merges into all-in (listed). A size below the minimum bet (blank = 1 big blind; check your game's rules) is blocked. A short all-in below the minimum is allowed and explained. A custom amount above the stack or below the minimum is an error and is never silently capped.
+- **Output per size:** the worked formula, the EV versus checking, the break-even fold rate (at least / at most / always / never), and the EV change per +10 fold points. The summary names the highest modelled EV among completed options only, with an explicit caveat, a ±10-point fold sensitivity check, and the list of options left out.
+- **Applicability and sync.** Context (pot, effective stack, big blind, equity) comes from the latest analysis. Facing a bet, multiway and preflop spots show why the model does not apply and keep the existing call/fold analysis. Any hand change clears the comparison; your typed numbers stay, and equity copied from the old analysis is removed. Every new analysis recomputes. A language switch carries only your own entries and recalculates if the previous page had a current result.
+- **Outside the model (stated on the page):** raises and minimum-raise or short-all-in reopening rules (your responsibility), later streets and implied odds, rake (a note appears if rake is entered), side pots and multiway, prior betting beyond P, position, and opponents' ranges changing with size (enter per-size assumptions). Kelly is not used to choose a bet size.
 
 ## Kelly criterion section
 
@@ -26,7 +37,7 @@ A teaching calculator for J. L. Kelly Jr., “A New Interpretation of Informatio
 
 Advice is a conditional heuristic, not solver output. It ignores future betting beyond the stated simplifications, side pots, tournament payouts (ICM) and player tendencies.
 
-Every local CSS/JS reference in both pages carries the same `?v=` version (the Web Worker reuses the page’s versioned `poker.js` URL). When changing any of those files, bump the version in both pages so returning visitors never mix cached old scripts with new HTML; `node test.js` checks that the references are versioned and consistent. After changing a source file, copy it to `public/` (`cp index.html zh.html app.js poker.js kelly.js kelly-ui.js language.js style.css public/`) and rerun `node test.js` and `node test-ui.js`.
+Every local CSS/JS reference in both pages carries the same `?v=` version (the Web Worker reuses the page’s versioned `poker.js` URL). When changing any of those files, bump the version in both pages so returning visitors never mix cached old scripts with new HTML; `node test.js` checks that the references are versioned and consistent. After changing a source file, copy it to `public/` (`cp index.html zh.html app.js poker.js kelly.js kelly-ui.js sizing.js sizing-ui.js language.js style.css public/`) and rerun `node test.js` and `node test-ui.js`.
 
 ## Accessibility
 
