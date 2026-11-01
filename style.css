@@ -24,3 +24,10 @@
 .sz-note{font-size:12px;line-height:1.5;color:#6b4a35;margin:8px 0 0}.sz-out p{font-size:12px;line-height:1.6;color:#355c4c;margin:8px 0 0}.sz-out:empty{display:none}.sz-out .formula{font-size:11px!important;word-break:break-word}
 .sz-result{margin-top:16px;background:#eaf3e9;border-radius:12px;padding:12px 16px}.sz-result p{font-size:13px;line-height:1.65;color:#1f5440;margin:4px 0}.sz-result p:first-child{font-weight:700}.sz-result:empty{display:none}
 @media(max-width:520px){.sz-controls{grid-template-columns:1fr}.sz-fill{padding-top:0}.sz-cards{grid-template-columns:1fr}}
+/* Automatic analysis: sections dim while an edit is settling; the waiting/calculating card shows the current hole cards. */
+.results.pending #output,.kelly.pending .kelly-grid,.bet-comparison.pending #szBody{opacity:.55;transition:opacity .15s}.updating{background:#fcf7f2;color:#6b4a35;padding:7px 11px;border-radius:20px;font-size:11px;font-weight:700;margin-left:auto;margin-right:8px}
+.empty-cards b,.empty-cards i{display:inline-block;font:inherit;font-style:normal;background:#f3f8f0;border:1px solid #dbe8d8;border-radius:8px;padding:10px 16px;margin:0 4px}.empty-cards i{background:#fff;transform:rotate(16deg);position:relative;left:6px;top:8px}.empty-cards b span,.empty-cards i span{display:block;font-size:20px}.empty-cards .red{color:#b34a3c}
+.empty[data-state="calculating"] .empty-cards{animation:pl-breathe 1.2s ease-in-out infinite}@keyframes pl-breathe{50%{opacity:.5}}@media(prefers-reduced-motion:reduce){.empty[data-state="calculating"] .empty-cards{animation:none}}
+.empty[data-state="invalid"] h3{color:#9c2f28}.prob-note{font-size:12px;line-height:1.6;color:#1f5440;font-weight:600;margin:0 0 4px}.prob-scope{font-size:11px;line-height:1.6;color:#4f6a5d;margin:0 0 10px}
+.sz-auto{display:flex!important;gap:8px;align-items:flex-start;font-size:12px;font-weight:700;color:#365c4d;min-height:44px;cursor:pointer}.sz-auto input{width:20px;height:20px;margin:2px 0 0;flex:none}
+.empty-cards{background:none!important;border:0!important;padding:0!important}.empty-cards i{color:#1c5544}.empty-cards i.red,.empty-cards b.red{color:#b34a3c}

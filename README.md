@@ -4,6 +4,25 @@ A browser-only Texas Hold'em learning calculator with English (`index.html`) and
 
 Open the site through a local HTTP server (for example `python3 -m http.server --directory public`). Run `node test.js` for evaluator, range, enumeration, sampling and Kelly-formula checks; it also fails if `public/` is out of sync with the source files. Run `node test-ui.js` for browser UI checks of both language pages: it serves `public/` and `tools/ui-harness.html` on a temporary localhost port and drives them in headless Google Chrome (set `CHROME=/path/to/chrome` if Chrome is installed elsewhere).
 
+## Automatic analysis and synchronization
+
+- **No button needed.** The example is analyzed on load (after every section has attached its listeners), and the page re-analyzes whenever inputs settle. Select changes and committed edits apply at once; typed numbers wait 300 ms and typed cards 450 ms. **Analyze** still forces an immediate update.
+- **Probabilities are separate from betting maths.** Results are cached by hole cards, board, number of opponents, range and precision (`probKey` in `app.js`). Changing only the pot, amount to call, stack, position, big blind, rake or bankroll reuses the identical result object. Win, tie and equity stay exactly the same (no resampling jitter) while the decision, Kelly and bet comparison recompute. The results panel says whether probabilities were newly calculated or reused, and lists what can and cannot change them.
+- **No stale or out-of-order output.**
+  - Every edit first marks all sections as updating.
+  - A change that needs new probabilities clears every linked section (`pokerlantern:invalidate`) before the worker starts.
+  - Obsolete workers are terminated, and a generation counter ignores any message from them.
+  - A worker that finishes while an edit is still pending only caches its result. The pending update then shows it with the newest inputs.
+  - Betting edits while the same cards are still being calculated just update the inputs the result will be shown with.
+- **Typed cards.** A half-typed card (“As K”, “10”) counts as still typing: guidance, no error, and nothing is calculated from the older cards. Impossible text is an error. A select change clears only its own group's typing state, and unfinished text is never rewritten. Incomplete inputs (missing cards, 1–2 board cards, a blank pot, stack or big blind) show guidance and clear every linked section. Invalid inputs show an error and do the same. The placeholder shows the current (or typed) hole cards, not a fixed example.
+- **Linked sections.**
+  - Kelly resyncs its split-aware fixed-call model after every analysis that faces a bet. With no bet to call it keeps the manual example and explains why.
+  - Bankroll and cap edits update Kelly immediately without any new analysis.
+  - “Use my own p and b” persists through betting edits and resyncs on new cards, opponents, range or precision.
+  - The bet comparison refreshes its context, amounts and EVs on every analysis. Its whole-range equity sync (default on, can be turned off) fills only equity fields you have not typed in, labels them “synced”, and notes that callers are usually stronger. Fold rates are never filled.
+- **Language switch** carries every input, including the exact typed card text (even unfinished or invalid), the bankroll and cap, your own Kelly and comparison entries, and the equity-sync choice. The new page re-analyzes automatically, or waits with guidance if the inputs are incomplete.
+- `window.PokerLanternState` exposes `idle()`, `shownKey()`, `cacheSize()` and an inert-by-default `setTestDelay(ms)` used by the browser tests to reproduce slow workers.
+
 ## What it calculates
 
 - **Equity** against 1–8 opponents. Heads-up on the flop, turn or river it is exact (every legal opponent hand and runout); otherwise it is Monte Carlo with a 95% sampling margin shown.

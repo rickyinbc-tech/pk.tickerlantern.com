@@ -10,6 +10,15 @@ en:{
  locale:'en-US',sep:' ',holeLabel:i=>`Hole card ${i}`,boardLabel:i=>`Community card ${i}`,
  streets:{0:'Preflop',3:'Flop',4:'Turn',5:'River'},incomplete:'Incomplete board',
  analyze:'Analyze this hand',running:p=>`Calculating… ${Math.round(p*100)}%`,exactTag:'EXACT',simTag:'SIMULATION',
+ auto:{calcTitle:'Calculating the odds…',calcText:d=>`Working out win, tie and equity for ${d}. Every section updates when this finishes.`,
+  waitTitle:'Waiting for complete inputs',badTitle:'Check the inputs',updating:'Updating…',
+  holeMissing:'Choose both hole cards (or type them, e.g. As Kd).',holeTyping:'Finish typing your two hole cards, e.g. As Kd. Nothing is calculated from a half-typed hand.',
+  boardTyping:'Finish typing the community cards: 0, 3, 4 or 5 cards. Nothing is calculated from a half-typed board.',
+  boardCount:n=>`The board has ${n} ${n===1?'card':'cards'}. Add cards until there are 3 (the flop), 4 or 5, or clear them.`,
+  blank:f=>`Enter the ${f}.`,fields:{bb:'big blind',stack:'effective stack',pot:'current pot',rangeCustom:'custom range percentage'},
+  desc:(h,b,n,r,t,exact)=>`${h}${b?` on ${b}`:''} against ${n} ${n===1?'opponent':'opponents'} holding ${r} (${exact?'exact enumeration':`${t.toLocaleString('en-US')} simulated deals`})`,
+  scope:'Win, tie and equity depend only on your cards, the board, the number of opponents, their range and the precision setting. Pot, amount to call, stack, position, big blind, rake and bankroll change the decision maths, not these probabilities.',
+  probNew:d=>`Probabilities calculated for ${d}.`,probReused:d=>`Same probabilities as before (${d}): only betting numbers changed, so the cards’ chances were not recalculated.`},
  err:{hole:'Choose both hole cards.',board:'Choose no community cards, or exactly 3, 4, or 5.',dup:'Each card can only be used once.',
   numbers:'Enter a positive big blind, effective stack and pot, and a non-negative call amount.',
   stack:'The amount to call cannot exceed your effective stack. If the bet is larger, enter the all-in amount you would actually call.',
@@ -78,6 +87,15 @@ zh:{
  locale:'zh-HK',sep:'',holeLabel:i=>`底牌 ${i}`,boardLabel:i=>`公共牌 ${i}`,
  streets:{0:'翻牌前',3:'翻牌圈',4:'轉牌圈',5:'河牌圈'},incomplete:'公共牌未完整',
  analyze:'分析這手牌',running:p=>`計算中… ${Math.round(p*100)}%`,exactTag:'精確計算',simTag:'模擬結果',
+ auto:{calcTitle:'正在計算機率…',calcText:d=>`正在計算${d}的獨贏、平手及權益。完成後所有部分都會自動更新。`,
+  waitTitle:'等待完整的資料',badTitle:'請檢查輸入',updating:'更新中…',
+  holeMissing:'請選擇兩張底牌（或直接輸入，例如 As Kd）。',holeTyping:'請輸入完兩張底牌，例如 As Kd。未輸入完的手牌不會用作計算。',
+  boardTyping:'請輸入完公共牌：0、3、4 或 5 張。未輸入完的公共牌不會用作計算。',
+  boardCount:n=>`公共牌現有 ${n} 張。請加至 3 張（翻牌）、4 張或 5 張，或把它們清除。`,
+  blank:f=>`請輸入${f}。`,fields:{bb:'大盲注',stack:'有效籌碼',pot:'目前底池',rangeCustom:'自訂範圍百分比'},
+  desc:(h,b,n,r,t,exact)=>`${h}${b?`（公共牌 ${b}）`:''}對 ${n} 位持${r}的對手（${exact?'精確計算':`${t.toLocaleString('zh-HK')} 次模擬發牌`}）`,
+  scope:'獨贏、平手及權益只取決於你的底牌、公共牌、對手人數、對手範圍及精確度設定。底池、跟注金額、籌碼、位置、大盲注、抽水及資金只會改變決策計算，不會改變這些機率。',
+  probNew:d=>`已為${d}計算機率。`,probReused:d=>`沿用相同的機率（${d}）：只改變了下注數字，所以牌的機會沒有重新計算。`},
  err:{hole:'請選擇兩張底牌。',board:'公共牌請選擇 0、3、4 或 5 張。',dup:'每張牌只可使用一次。',
   numbers:'大盲注、有效籌碼及底池必須大於零；跟注金額不可為負數。',
   stack:'跟注金額不能超過你的有效籌碼。如果對手下注更多，請輸入你實際能全押跟注的金額。',
@@ -148,30 +166,51 @@ const money=x=>Number(x.toFixed(2)).toLocaleString(TEXT.locale,{maximumFractionD
 const cardText=c=>RANK_LABELS[c%13]+SUITS[Math.floor(c/13)];
 
 /* ---------- Card inputs ---------- */
-function makeCards(id,count){const container=$(id);for(let i=0;i<count;i++){const s=document.createElement('select');s.className='card-select';s.setAttribute('aria-label',id==='hole'?TEXT.holeLabel(i+1):TEXT.boardLabel(i+1));s.add(new Option('—',''));for(let suit=0;suit<4;suit++)for(let r=12;r>=0;r--)s.add(new Option(RANK_LABELS[r]+SUITS[suit],String(suit*13+r)));s.addEventListener('change',cardsChanged);container.appendChild(s)}}
+const typing={hole:null,board:null};// unfinished or invalid quick-entry text per group
+function makeCards(id,count){const container=$(id);for(let i=0;i<count;i++){const s=document.createElement('select');s.className='card-select';s.setAttribute('aria-label',id==='hole'?TEXT.holeLabel(i+1):TEXT.boardLabel(i+1));s.add(new Option('—',''));for(let suit=0;suit<4;suit++)for(let r=12;r>=0;r--)s.add(new Option(RANK_LABELS[r]+SUITS[suit],String(suit*13+r)));s.addEventListener('change',()=>{typing[id]=null;cardsChanged()});container.appendChild(s)}}
 makeCards('hole',2);makeCards('board',5);
 const selects=()=>[...document.querySelectorAll('.card-select')];
 function cards(id){return [...$(id).querySelectorAll('select')].map(s=>s.value===''?null:Number(s.value))}
-function cardsChanged(){
+function cardsChanged(keepText){
  const used=new Map();selects().forEach(s=>{if(s.value!=='')used.set(s.value,s)});
  // Grey out cards already chosen elsewhere so each card can be picked only once.
  selects().forEach(s=>{const suit=Math.floor(Number(s.value)/13);s.classList.toggle('red',s.value!==''&&(suit===1||suit===2));for(const o of s.options)o.disabled=o.value!==''&&used.has(o.value)&&used.get(o.value)!==s});
- for(const id of ['hole','board'])$(id+'Text').value=cards(id).filter(c=>c!==null).map(cardText).join(' ');
+ // Never rewrite a quick-entry field that still holds unfinished text (or the one being typed in).
+ for(const id of ['hole','board'])if(id!==keepText&&!typing[id])$(id+'Text').value=cards(id).filter(c=>c!==null).map(cardText).join(' ');
  updateStreet();drawRange();
 }
+// Tolerant parser for typed cards: a trailing half-typed card ("K", "10") is reported as partial, not as an error.
 function parseCards(text,max){
- const out=[];
- for(const token of text.split(/[\s,;/|]+/).filter(Boolean)){const s=token.toUpperCase();let i=0;// a token may hold several cards, e.g. "AsKd"
-  while(i<s.length){const m=/^(10|[2-9TJQKA])([SHDC♠♥♦♣♤♡♢♧])/.exec(s.slice(i));if(!m)throw Error(TEXT.err.parse(token));
-   const rank='23456789TJQKA'.indexOf(m[1]==='10'?'T':m[1]),suit='S♠♤H♥♡D♦♢C♣♧'.indexOf(m[2]);out.push(Math.floor(suit/3)*13+rank);i+=m[0].length}}
- if(out.length>max)throw Error(TEXT.err.count(out.length,max));if(new Set(out).size!==out.length)throw Error(TEXT.err.dup);return out;
+ const out=[],tokens=text.split(/[\s,;/|]+/).filter(Boolean);let partial=false;
+ tokens.forEach((token,ti)=>{const s=token.toUpperCase();let i=0;// a token may hold several cards, e.g. "AsKd"
+  while(i<s.length){const m=/^(10|[2-9TJQKA])([SHDC♠♥♦♣♤♡♢♧])/.exec(s.slice(i));
+   if(!m){if(ti===tokens.length-1&&/^(1|10|[2-9TJQKA])$/.test(s.slice(i))){partial=true;break}throw Error(TEXT.err.parse(token))}
+   const rank='23456789TJQKA'.indexOf(m[1]==='10'?'T':m[1]),suit='S♠♤H♥♡D♦♢C♣♧'.indexOf(m[2]);out.push(Math.floor(suit/3)*13+rank);i+=m[0].length}});
+ if(out.length>max)throw Error(TEXT.err.count(out.length,max));if(new Set(out).size!==out.length)throw Error(TEXT.err.dup);
+ return {cards:out,partial};
 }
-for(const [id,max] of [['hole',2],['board',5]])$(id+'Text').addEventListener('change',e=>{
- try{const list=parseCards(e.target.value,max),other=cards(id==='hole'?'board':'hole').filter(c=>c!==null);if(list.some(c=>other.includes(c)))throw Error(TEXT.err.dup);
-  [...$(id).querySelectorAll('select')].forEach((s,i)=>{s.value=list[i]===undefined?'':String(list[i])});cardsChanged()}
- catch(err){$('error').textContent=err.message}
-});
-$('clearBoard').addEventListener('click',()=>{$('board').querySelectorAll('select').forEach(s=>s.value='');cardsChanged();invalidate()});
+// While a quick-entry field holds something other than a complete hand/board, its group is not usable (see typing).
+function readTyped(id){
+ const max=id==='hole'?2:5;
+ try{const {cards:list,partial}=parseCards($(id+'Text').value,max),n=list.length;
+  const complete=!partial&&(id==='hole'?n===2:[0,3,4,5].includes(n));
+  return {list,state:complete?'complete':'partial'};
+ }catch(err){return {state:'invalid',msg:err.message}}
+}
+function applyTyped(id,committed){
+ const t=readTyped(id);
+ if(t.state==='complete'){
+  const other=cards(id==='hole'?'board':'hole').filter(c=>c!==null);
+  if(t.list.some(c=>other.includes(c))){typing[id]={state:'invalid',msg:TEXT.err.dup};return}
+  typing[id]=null;$(id).querySelectorAll('select').forEach((s,i)=>{s.value=t.list[i]===undefined?'':String(t.list[i])});
+  cardsChanged(committed?undefined:id);// never rewrite the text the reader is still typing
+ }else typing[id]=t;
+}
+for(const id of ['hole','board']){
+ $(id+'Text').addEventListener('input',()=>{applyTyped(id,false);schedule(DELAY.typing)});
+ $(id+'Text').addEventListener('change',()=>{applyTyped(id,true);schedule(0)});
+}
+$('clearBoard').addEventListener('click',()=>{$('board').querySelectorAll('select').forEach(s=>s.value='');typing.board=null;cardsChanged();schedule(0)});
 function updateStreet(){const n=cards('board').filter(v=>v!==null).length;$('street').textContent=TEXT.streets[n]||TEXT.incomplete}
 
 /* ---------- Opponent range ---------- */
@@ -187,44 +226,97 @@ function drawRange(){
 }
 // Rows are the higher rank; suited hands above the diagonal, offsuit below, pairs on it (standard grid layout).
 
-/* ---------- Example and state ---------- */
-function example(){const h=$('hole').querySelectorAll('select');h[0].value='9';h[1].value='22';$('board').querySelectorAll('select').forEach(s=>s.value='');$('position').value='button';$('opponents').value='1';$('bb').value=2;$('stack').value=200;$('pot').value=3;$('call').value=0;$('range').value='100';cardsChanged();invalidate()}
-let worker;
+/* ---------- Example and automatic analysis ---------- */
+function setExample(){const h=$('hole').querySelectorAll('select');h[0].value='9';h[1].value='22';$('board').querySelectorAll('select').forEach(s=>s.value='');$('position').value='button';$('opponents').value='1';$('bb').value=2;$('stack').value=200;$('pot').value=3;$('call').value=0;$('range').value='100';typing.hole=typing.board=null;cardsChanged()}
+function example(){setExample();schedule(0)}
 // The worker runs the same versioned poker.js the page loaded, so a cached older engine is never paired with this page.
 const WORKER_URL=document.querySelector('script[src^="poker.js"]').getAttribute('src');
-function resetButton(){$('calculate').disabled=false;$('calculate').firstElementChild.textContent=TEXT.analyze}
-function invalidate(){if(worker){worker.terminate();worker=null}resetButton();$('output').hidden=true;$('empty').hidden=false;$('error').textContent='';document.dispatchEvent(new CustomEvent('pokerlantern:invalidate'))}
-$('example').addEventListener('click',example);example();
-// A result applies only to the exact inputs used in its calculation.
-document.querySelectorAll('.setup input, .setup select').forEach(el=>el.addEventListener('change',()=>{const msg=$('error').textContent;invalidate();if(el.classList.contains('quick'))$('error').textContent=msg;if(el.id==='range'||el.id==='rangeCustom')drawRange()}));
-// Clear old hand and Kelly results immediately while text or numeric inputs are being edited.
-document.querySelectorAll('.setup input').forEach(el=>el.addEventListener('input',()=>{invalidate();if(el.id==='rangeCustom')drawRange()}));
-
-/* ---------- Calculation ---------- */
-$('calculate').addEventListener('click',()=>{
- // Re-parse the visible quick-entry fields so an invalid edit can never silently
- // calculate with the previous selection. This also handles keyboard submission.
- try {
-  const h=parseCards($('holeText').value,2),b=parseCards($('boardText').value,5);
-  if(new Set([...h,...b]).size!==h.length+b.length)throw Error(TEXT.err.dup);
-  for(const [id,list] of [['hole',h],['board',b]])$(id).querySelectorAll('select').forEach((el,i)=>el.value=list[i]===undefined?'':String(list[i]));
-  cardsChanged();
- } catch(err) {$('error').textContent=err.message;return}
- const hole=cards('hole'),board=cards('board').filter(v=>v!==null),num=id=>$(id).value.trim()===''?0:+$(id).value;
+const DELAY={typing:450,number:300,select:0};
+/* Card probabilities are cached by everything that can change them; betting numbers never are part of the key,
+   so editing pot, call, stack, position, big blind or rake reuses the identical result instead of resampling. */
+const cache=new Map(),CACHE_SIZE=24;
+const probKey=x=>[x.hole.join('.'),x.board.join('.'),x.opponents,x.range,x.trials].join('|');
+let worker=null,running=null,gen=0,timer=null,shownKey=null,testDelay=0;
+function cancelWorker(){if(worker){worker.terminate();worker=null}running=null;gen++}// gen++ makes any late message from it ignored
+function setBusy(on){$('calculate').firstElementChild.textContent=on?TEXT.running(0):TEXT.analyze;document.querySelector('.results').setAttribute('aria-busy',on?'true':'false')}
+function emit(name,detail){document.dispatchEvent(new CustomEvent('pokerlantern:'+name,{detail}))}
+// Mark every section as updating while the reader is still editing; nothing old is presented as current.
+function schedule(delay){
+ clearTimeout(timer);document.querySelector('.results').classList.add('pending');$('updating').hidden=false;emit('pending');
+ timer=setTimeout(update,delay);
+}
+function describe(x,exact){return TEXT.auto.desc(x.hole.map(cardText).join(' '),x.board.map(cardText).join(' '),x.opponents,TEXT.rangeName(x.range),x.trials,exact)}
+function drawEmptyCards(){
+ // While a hand is being typed, show the typed cards (unknown ones as “?”), never the older selection.
+ const t=typing.hole,typed=t?(t.state==='partial'?readTyped('hole').list||[]:[]):null;
+ const hole=typed?[typed[0]??null,typed[1]??null]:cards('hole'),box=$('emptyCards');box.replaceChildren();
+ hole.forEach((c,i)=>{const el=document.createElement(i?'i':'b');el.className='empty-card';el.textContent=c===null?'?':RANK_LABELS[c%13];const s=document.createElement('span');s.textContent=c===null?'':SUITS[Math.floor(c/13)];el.appendChild(s);if(c!==null&&[1,2].includes(Math.floor(c/13)))el.classList.add('red');box.appendChild(el)});
+}
+function showState(kind,text){
+ $('output').hidden=true;$('empty').hidden=false;$('empty').dataset.state=kind;drawEmptyCards();
+ $('emptyTitle').textContent=kind==='calculating'?TEXT.auto.calcTitle:kind==='invalid'?TEXT.auto.badTitle:TEXT.auto.waitTitle;$('emptyText').textContent=text;
+ document.querySelector('.results').classList.remove('pending');$('updating').hidden=true;
+}
+// Read every input. Returns {kind:'ok', x} or {kind:'incomplete'|'invalid', msg}.
+function readState(){
+ const A=TEXT.auto,E=TEXT.err;
+ for(const id of ['hole','board'])if(typing[id])return typing[id].state==='invalid'?{kind:'invalid',msg:typing[id].msg}:{kind:'incomplete',msg:id==='hole'?A.holeTyping:A.boardTyping};
+ const hole=cards('hole'),board=cards('board').filter(v=>v!==null);
+ if(hole.includes(null))return {kind:'incomplete',msg:A.holeMissing};
+ if(![0,3,4,5].includes(board.length))return {kind:'incomplete',msg:A.boardCount(board.length)};
+ if(new Set([...hole,...board]).size!==2+board.length)return {kind:'invalid',msg:E.dup};
+ for(const id of ['bb','stack','pot'])if($(id).value.trim()==='')return {kind:'incomplete',msg:A.blank(A.fields[id])};
+ if($('range').value==='custom'&&$('rangeCustom').value.trim()==='')return {kind:'incomplete',msg:A.blank(A.fields.rangeCustom)};
+ const num=id=>$(id).value.trim()===''?0:+$(id).value;
  const x={hole,board,bb:+$('bb').value,stack:+$('stack').value,pot:num('pot'),call:num('call'),opponents:+$('opponents').value,position:$('position').value,range:rangePct(),rake:num('rake'),rakeCap:num('rakeCap'),trials:+$('precision').value};
- const fail=msg=>{$('error').textContent=msg};$('error').textContent='';const E=TEXT.err;
- if(hole.includes(null))return fail(E.hole);if(![0,3,4,5].includes(board.length))return fail(E.board);if(new Set([...hole,...board]).size!==2+board.length)return fail(E.dup);
- if(![x.bb,x.stack,x.pot,x.call].every(Number.isFinite)||x.bb<=0||x.stack<=0||x.pot<=0||x.call<0)return fail(E.numbers);
- if(x.call>x.stack)return fail(E.stack);if(x.call>x.pot)return fail(E.pot);
- if(!(x.rake>=0&&x.rake<=25)||!(x.rakeCap>=0))return fail(E.rake);if(!(x.range>=0.5&&x.range<=100))return fail(E.range);
- $('calculate').disabled=true;$('calculate').firstElementChild.textContent=TEXT.running(0);if(worker)worker.terminate();worker=new Worker(WORKER_URL);
- worker.onmessage=e=>{if(e.data.progress!==undefined){$('calculate').firstElementChild.textContent=TEXT.running(e.data.progress);return}
-  resetButton();worker.terminate();worker=null;if(e.data.error)return fail(e.data.error==='RANGE_IMPOSSIBLE'?E.impossible:e.data.error==='DUPLICATE_CARDS'?E.dup:E.sim);show(e.data.result,x)};
- worker.onerror=()=>{resetButton();fail(E.sim)};
- worker.postMessage({hole,board,opponents:x.opponents,trials:x.trials,range:x.range});
+ if(![x.bb,x.stack,x.pot,x.call].every(Number.isFinite)||x.bb<=0||x.stack<=0||x.pot<=0||x.call<0)return {kind:'invalid',msg:E.numbers};
+ if(x.call>x.stack)return {kind:'invalid',msg:E.stack};if(x.call>x.pot)return {kind:'invalid',msg:E.pot};
+ if(!(x.rake>=0&&x.rake<=25)||!(x.rakeCap>=0))return {kind:'invalid',msg:E.rake};if(!(x.range>=0.5&&x.range<=100))return {kind:'invalid',msg:E.range};
+ return {kind:'ok',x};
+}
+function update(){
+ clearTimeout(timer);timer=null;
+ const st=readState();
+ if(st.kind!=='ok'){cancelWorker();setBusy(false);shownKey=null;$('error').textContent=st.kind==='invalid'?st.msg:'';showState(st.kind,st.msg);emit('invalidate');return}
+ $('error').textContent='';
+ const x=st.x,key=probKey(x),hit=cache.get(key);
+ if(hit){cancelWorker();setBusy(false);const reused=key===shownKey;shownKey=key;show(hit,x,reused);return}
+ if(running&&running.key===key){running.x=x;return}// same cards already being calculated: only the betting numbers changed
+ cancelWorker();shownKey=null;const my=gen;running={key,x};setBusy(true);
+ showState('calculating',TEXT.auto.calcText(describe(x,x.opponents===1&&x.board.length>=3)));emit('invalidate');
+ worker=new Worker(WORKER_URL);
+ worker.onmessage=e=>{
+  if(my!==gen)return;// an obsolete calculation: never let it touch any section
+  if(e.data.progress!==undefined){$('calculate').firstElementChild.textContent=TEXT.running(e.data.progress);return}
+  const latest=running.x;worker.terminate();worker=null;running=null;setBusy(false);
+  if(!e.data.error){cache.set(key,e.data.result);if(cache.size>CACHE_SIZE)cache.delete(cache.keys().next().value)}
+  // An edit arrived while this was running: never display it for inputs that are already out of date.
+  // The result is cached (it is correct for its cards), and the pending update shows it with the newest inputs.
+  if(timer!==null)return;
+  if(e.data.error){const E=TEXT.err,msg=e.data.error==='RANGE_IMPOSSIBLE'?E.impossible:e.data.error==='DUPLICATE_CARDS'?E.dup:E.sim;$('error').textContent=msg;showState('invalid',msg);emit('invalidate');return}
+  shownKey=key;show(e.data.result,latest,false);
+ };
+ // Test seam (inert by default): delay result handling to reproduce slow workers deterministically.
+ if(testDelay){const handle=worker.onmessage;worker.onmessage=e=>{if(e.data.progress!==undefined)return handle(e);setTimeout(()=>handle(e),testDelay)}}
+ worker.onerror=()=>{if(my!==gen)return;cancelWorker();setBusy(false);$('error').textContent=TEXT.err.sim;showState('invalid',TEXT.err.sim);emit('invalidate')};
+ worker.postMessage({hole:x.hole,board:x.board,opponents:x.opponents,trials:x.trials,range:x.range});
+}
+$('example').addEventListener('click',example);
+// Selects update at once; typed numbers wait until typing pauses; a committed change (blur/enter) updates at once.
+document.querySelectorAll('.setup select').forEach(el=>el.addEventListener('change',()=>{if(el.id==='range')drawRange();schedule(DELAY.select)}));
+document.querySelectorAll('.setup input:not(.quick)').forEach(el=>{
+ el.addEventListener('input',()=>{if(el.id==='rangeCustom')drawRange();schedule(DELAY.number)});
+ el.addEventListener('change',()=>{if(el.id==='rangeCustom')drawRange();schedule(0)});
 });
+// Analyze runs now instead of waiting for the typing pause.
+$('calculate').addEventListener('click',()=>{for(const id of ['hole','board'])if(typing[id])applyTyped(id,true);update()});
+// Load the example without scheduling: timers may run between scripts, before the other sections are ready.
+setExample();
+// First analysis once every section (Kelly, bet comparison, language restore) has attached its listeners.
+document.addEventListener('DOMContentLoaded',()=>{if(timer===null&&!running&&shownKey===null)update()});
+window.PokerLanternState={idle:()=>timer===null&&!running,cacheSize:()=>cache.size,shownKey:()=>shownKey,setTestDelay:ms=>{testDelay=ms}};
 
-function show(r,x){
+function show(r,x,reused){
  const {equity:e,wins,ties,se,trials,exact,categories}=r,{hole,board,bb,stack,pot,call,opponents,position,range}=x;
  const pre=board.length===0,river=board.length===5,fair=1/(opponents+1),k=P.classOf(hole[0],hole[1]),rankPct=P.percentileOf(k);
  let title,why,size='',tech,math,table=null;
@@ -272,7 +364,9 @@ function show(r,x){
  $('technique').textContent=tech;
  $('distTitle').textContent=TEXT.distTitle(exact,river);$('distNote').hidden=river;$('distNote').textContent=TEXT.distNote;
  const dist=$('dist');dist.replaceChildren();categories.forEach((v,i)=>{if(v<=0)return;const row=document.createElement('div');row.className='bar';row.innerHTML='<span></span><i><b></b></i><em></em>';row.children[0].textContent=TEXT.cats[i];row.querySelector('b').style.width=(v*100).toFixed(2)+'%';row.children[2].textContent=v>=.9995?'100%':v<.0005?'<0.1%':pct(v);dist.appendChild(row)});
+ $('probScope').textContent=TEXT.auto.scope;$('probNote').textContent=reused?TEXT.auto.probReused(describe(x,exact)):TEXT.auto.probNew(describe(x,exact));
+ document.querySelector('.results').classList.remove('pending');$('updating').hidden=true;
  updateStreet();
- // The Kelly section may use this result, but only when the reader asks it to.
- document.dispatchEvent(new CustomEvent('pokerlantern:result',{detail:{r,x}}));
+ // Every linked section (Kelly, bet comparison) recomputes from this result; reused results carry identical probabilities.
+ emit('result',{r,x,reused,key:probKey(x)});
 }

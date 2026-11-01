@@ -6,9 +6,9 @@ const SZ={
 en:{
  names:{'33':'⅓ pot','50':'½ pot','75':'¾ pot','100':'Pot-size bet',allin:'All-in',custom:'Custom bet',check:'Check'},
  status:{
-  none:'Analyze a hand first. This comparison uses the analyzed pot, effective stack and equity as its context.',
+  none:'Waiting for a hand analysis. It runs automatically once the hand inputs are complete, and this comparison uses its pot, effective stack and equity as context.',
   ready:'Heads-up, after the flop, no bet to call: compare checking with betting when it is your turn and both actions are legal. Every fold and equity number below is your own assumption.',
-  stale:'The hand inputs changed, so the previous comparison was cleared. Numbers you typed are kept; any equity copied from the old analysis was removed. Analyze again to compare for the new spot.',
+  stale:'The hand is changing or incomplete, so the previous comparison was cleared. Numbers you typed are kept; synced equity is refilled from the new analysis, which runs automatically.',
   facing:'You are facing a bet, so this first-bet comparison does not apply. Use the call/fold analysis above. Raising is not modelled here.',
   multiway:'With more than one opponent, who folds and who calls interact in ways this simple model cannot represent, so the comparison is heads-up only. The equity and call/fold numbers above still apply.',
   preflop:'Before the flop, blinds, raises and later streets dominate the decision, so this comparison is for the flop, turn or river only.'},
@@ -28,20 +28,19 @@ en:{
  be:{always:'Betting matches or beats checking at every fold rate under these equities.',never:'Checking beats betting at every fold rate under these equities.',
   atLeast:f=>`Betting matches or beats checking once the fold rate is at least ${f}.`,atMost:f=>`Betting matches or beats checking only while the fold rate is at most ${f}: you prefer a call.`},
  slope:d=>`Each +10 points of fold rate changes this EV by ${d} chips.`,
- copied:'copied',copiedNote:'Uses the copied whole-range showdown equity for the caller. Hands that call are usually stronger, so this is probably optimistic.',
+ copied:'synced',copiedNote:'Uses your whole-range showdown equity, synced automatically, as the caller equity. Hands that call are usually stronger, so this is probably optimistic. Type your own value to override it.',
  bestOne:(n,ev)=>`Highest modelled EV among the options you completed: ${n} at ${ev} chips.`,bestTie:(list,ev)=>`Tied highest modelled EV among the options you completed: ${list} at ${ev} chips.`,
  bestCaveat:'That is only the best of these tested options under your assumptions—not an optimal bet, and not a prediction of what will happen.',
- noneComplete:'No option has complete assumptions yet.',excluded:list=>`Not compared (missing or invalid assumptions): ${list}.`,
+ noneComplete:'No bet size has complete assumptions yet: enter a fold rate and caller equity for at least one size to compare it with checking.',excluded:list=>`Not compared (missing or invalid assumptions): ${list}.`,
  robust:(lo,hi)=>`Sensitivity: with every fold assumption 10 points lower, the highest would be ${lo}; 10 points higher, ${hi}.`,
  rakeNote:'Rake is entered above but is not applied here; actual rake may lower these EVs.',
- copyDone:'Copied the showdown equity into the empty equity fields as a starting assumption. Fold rates were not filled: enter your own.',
 },
 zh:{
  names:{'33':'三分一底池','50':'半個底池','75':'四分三底池','100':'一個底池','allin':'全押',custom:'自訂下注',check:'過牌'},
  status:{
-  none:'請先分析一手牌。這個比較以分析中的底池、有效籌碼及權益作為背景。',
+  none:'等待牌局分析。資料完整後會自動分析，而這個比較會以分析的底池、有效籌碼及權益作為背景。',
   ready:'單挑、翻牌後、沒有需要跟注的注碼：輪到你行動且過牌和下注均合法時，可以比較兩者。下面所有棄牌率及權益數字都是你自己的假設。',
-  stale:'牌局資料已經改變，所以之前的比較已清除。你輸入的數字會保留；從舊分析複製的權益已被移除。請再分析一次，為新的情況作比較。',
+  stale:'牌局資料正在改變或未完整，所以之前的比較已清除。你輸入的數字會保留；同步的權益會在新的分析（自動進行）完成後重新填上。',
   facing:'你正面對下注，所以這個率先下注的比較並不適用。請使用上面的跟注／棄牌分析。這裏沒有計算加注。',
   multiway:'對手多於一位時，誰棄牌、誰跟注會互相影響，這個簡單模型無法表示，所以比較只適用於單挑。上面的權益及跟注／棄牌數字仍然適用。',
   preflop:'翻牌前的決策主要取決於盲注、加注及之後的回合，所以這個比較只適用於翻牌、轉牌或河牌。'},
@@ -61,13 +60,12 @@ zh:{
  be:{always:'以這些權益計，任何棄牌率下下注都不遜於過牌。',never:'以這些權益計，任何棄牌率下過牌都勝過下注。',
   atLeast:f=>`棄牌率最少達到 ${f} 時，下注才不遜於過牌。`,atMost:f=>`只有棄牌率不超過 ${f} 時，下注才不遜於過牌：你較希望被跟注。`},
  slope:d=>`棄牌率每增加 10 個百分點，這個期望值改變 ${d} 籌碼。`,
- copied:'已複製',copiedNote:'以複製的整體攤牌權益作為對跟注者的權益。會跟注的手牌通常較強，所以這可能過於樂觀。',
+ copied:'同步',copiedNote:'以自動同步的整體攤牌權益作為對跟注者的權益。會跟注的手牌通常較強，所以這可能過於樂觀。輸入你自己的數值即可取代。',
  bestOne:(n,ev)=>`在你已填妥的選項中，模型期望值最高的是：${n}，${ev} 籌碼。`,bestTie:(list,ev)=>`在你已填妥的選項中，模型期望值並列最高的是：${list}，${ev} 籌碼。`,
  bestCaveat:'這只是在你的假設下，這些已測試選項中最好的一個——並非最佳下注，亦不是對結果的預測。',
- noneComplete:'目前沒有任何選項的假設已填妥。',excluded:list=>`未作比較（假設缺失或無效）：${list}。`,
+ noneComplete:'目前沒有任何下注額的假設已填妥：請至少為一個下注額輸入棄牌率及對跟注者的權益，才能與過牌比較。',excluded:list=>`未作比較（假設缺失或無效）：${list}。`,
  robust:(lo,hi)=>`敏感度：若所有棄牌率假設低 10 個百分點，最高的會是${lo}；高 10 個百分點，則是${hi}。`,
  rakeNote:'上面已輸入抽水，但這裏沒有計算；實際抽水可能令這些期望值降低。',
- copyDone:'已把攤牌權益複製到空白的權益欄，作為起始假設。棄牌率沒有填寫：請輸入你自己的估計。',
 }}[LANG];
 
 const SZ_KEYS=['33','50','75','100','allin','custom'];
@@ -96,9 +94,12 @@ function szBuild(){
   wrap.appendChild(fs);
  };
  card('check');SZ_KEYS.forEach(card);
- wrap.querySelectorAll('input').forEach(i=>i.addEventListener('input',()=>{szSetOrigin(i,null);szRender()}));
+ // Anything the reader types (even clearing a field) belongs to the reader from then on.
+ wrap.querySelectorAll('input').forEach(i=>i.addEventListener('input',()=>{szSetOrigin(i,'user');szRender()}));
 }
-function szSetOrigin(input,origin){if(origin)input.dataset.origin=origin;else delete input.dataset.origin;const tag=input.parentElement.querySelector('.src');if(tag)tag.hidden=!origin}
+function szSetOrigin(input,origin){if(origin)input.dataset.origin=origin;else delete input.dataset.origin;const tag=input.parentElement.querySelector('.src');if(tag)tag.hidden=origin!=='auto'}
+// Synced starting assumption: fill an equity field the reader has not taken over with the current whole-range equity.
+function szAutoFill(input,usable){if(input.dataset.origin==='user')return;if(usable&&$('szAuto').checked&&szCtx){input.value=String(Number((szCtx.equity*100).toFixed(1)));szSetOrigin(input,'auto')}else if(input.dataset.origin==='auto'){input.value='';szSetOrigin(input,null)}}
 const szCard=key=>$('szCards').querySelector(`.sz-card[data-key="${key}"]`);
 
 /* ---------- Rendering ---------- */
@@ -114,6 +115,7 @@ function szRender(){
  $('szContext').textContent=SZ.context(szMoney(c.pot),szMoney(c.stack),c.minValid?szMoney(c.minBet):'—',c.minDefault?SZ.minDefault:'',pct(szCtx.equity),szCtx.exact?SZ.exact:SZ.sim,TEXT.rangeName(szCtx.range));
  $('szRake').hidden=!(szCtx.rake>0);
  if(!c.minValid){SZ_KEYS.concat('check').forEach(k=>{szCard(k).querySelector('.sz-out').textContent=''});$('szResult').textContent='';return}
+ szAutoFill($('szEqCheck'),true);
  const cand=Sizing.candidates(c).rows,options=[],labels={};
  for(const k of SZ_KEYS){
   const el=szCard(k),amt=el.querySelector('.sz-amt'),note=el.querySelector('.sz-note'),out=el.querySelector('.sz-out'),inputs=el.querySelectorAll('input:not(#szCustom)');
@@ -128,7 +130,7 @@ function szRender(){
   else{bet=row.bet;amt.textContent=SZ.chips(szMoney(bet))+(row.allIn?` · ${SZ.allInTag}`:'');
    if(row.mergedFrom&&row.mergedFrom.length)notes.push(SZ.merged(szJoin(row.mergedFrom.map(m=>SZ.names[m]))));
    if(row.shortAllIn)notes.push(SZ.shortAllIn(szMoney(c.minBet)))}
-  el.classList.toggle('blocked',!!blocked.trim());inputs.forEach(i=>i.disabled=!!blocked.trim());
+  el.classList.toggle('blocked',!!blocked.trim());inputs.forEach(i=>i.disabled=!!blocked.trim());szAutoFill($('szE-'+k),bet!==null&&!blocked.trim());
   note.hidden=!(notes.length||blocked.trim());note.textContent=blocked.trim()?blocked:notes.join(szSep);
   out.textContent='';labels[k]=SZ.names[k]+(bet!==null?` (${szMoney(bet)})`:'');
   if(bet!==null)options.push({key:k,bet,fold:szPct('szF-'+k),eqCall:szPct('szE-'+k)});
@@ -148,13 +150,13 @@ function szRender(){
   lines.push(SZ.betWorked(szFix(r.fold),szMoney(c.pot),szFix(1-r.fold),szFix(r.eqCall),`${szMoney(c.pot)} + 2 × ${szMoney(r.bet)}`,szMoney(r.bet),szSigned(called),szSigned(r.ev)));
   if(Number.isFinite(r.vsCheck)){lines.push(SZ.vsCheck(szSigned(r.vsCheck)));const be=r.breakEven;lines.push(be.kind==='atLeast'||be.kind==='atMost'?SZ.be[be.kind](pct(be.fold)):SZ.be[be.kind])}
   lines.push(SZ.slope(szSigned(r.slope)));
-  if($('szE-'+r.key).dataset.origin)lines.push(SZ.copiedNote);
+  if($('szE-'+r.key).dataset.origin==='auto')lines.push(SZ.copiedNote);
   out.replaceChildren(...lines.map((t,i)=>{const p=document.createElement('p');p.textContent=t;if(i===0)p.className='formula';return p}));
  }
  // Summary: best among completed options only, plus how the answer moves if every fold guess shifts by 10 points.
  const name=k=>k==='check'?SZ.names.check:labels[k];
  const summary=[];
- if(!res.best.length)summary.push(SZ.noneComplete);
+ if(!res.rows.some(r=>r.complete))summary.push(SZ.noneComplete);// checking alone is not a comparison
  else{summary.push(res.best.length===1?SZ.bestOne(name(res.best[0]),szSigned(res.top)):SZ.bestTie(szJoin(res.best.map(name)),szSigned(res.top)),SZ.bestCaveat);
   const shifted=d=>{const s=Sizing.compare({pot:c.pot,eqCheck:eqCheck===null?NaN:eqCheck,options:clean.filter(o=>!o.bad).map(o=>({...o,fold:Number.isFinite(o.fold)?Math.min(1,Math.max(0,o.fold+d)):NaN}))});return szJoin(s.best.map(name))};
   if(res.rows.some(r=>r.complete))summary.push(SZ.robust(shifted(-.1),shifted(.1)))}
@@ -165,29 +167,24 @@ function szRender(){
 function szSetMode(mode){szMode=mode;szRender()}
 
 /* ---------- Sync with the hand analysis ---------- */
+const szSection=()=>$('bet-comparison');
+function szPending(on){szSection().classList.toggle('pending',on);szSection().setAttribute('aria-busy',on?'true':'false')}
+document.addEventListener('pokerlantern:pending',()=>szPending(true));
 document.addEventListener('pokerlantern:result',e=>{
- const {r,x}=e.detail;if(szCtx)szClearCopied();szCtx={pot:x.pot,stack:x.stack,bb:x.bb,range:x.range,rake:x.rake,equity:r.equity,exact:r.exact};
- szSetMode(x.call>0?'facing':x.opponents>1?'multiway':x.board.length<3?'preflop':'ready');
+ const {r,x}=e.detail;szPending(false);szCtx={pot:x.pot,stack:x.stack,bb:x.bb,range:x.range,rake:x.rake,equity:r.equity,exact:r.exact};
+ szSetMode(x.call>0?'facing':x.opponents>1?'multiway':x.board.length<3?'preflop':'ready');// synced equity fields refresh during render
 });
-function szClearCopied(){
- // Copied equity belongs to the analysis that produced it, even when the same hand is re-simulated.
- $('szCards').querySelectorAll('input[data-origin="copied"]').forEach(i=>{i.value='';szSetOrigin(i,null)});
- $('szFillNote').textContent='';
-}
 document.addEventListener('pokerlantern:invalidate',()=>{
- if(szMode==='none'||szMode==='stale')return;
- szClearCopied();szCtx=null;szSetMode('stale');
+ szPending(false);
+ // Synced equity belongs to the analysis that produced it: clear it now; it is refilled from the next analysis.
+ $('szCards').querySelectorAll('input[data-origin="auto"]').forEach(i=>{i.value=''});
+ if(szMode==='none'||szMode==='stale')return;szCtx=null;szSetMode('stale');
 });
-$('szFill').addEventListener('click',()=>{
- if(szMode!=='ready')return;const v=String(Number((szCtx.equity*100).toFixed(1)));
- // Only cards with a usable bet: a blocked size, or a custom card without an amount yet, gets nothing.
- ['szEqCheck',...SZ_KEYS.filter(k=>k!=='custom'||$('szCustom').value.trim()!=='').map(k=>'szE-'+k)].forEach(id=>{const i=$(id);if(i.value.trim()===''&&!i.disabled){i.value=v;szSetOrigin(i,'copied')}});
- $('szFillNote').textContent=SZ.copyDone;szRender();
-});
+$('szAuto').addEventListener('change',()=>{if(!$('szAuto').checked)$('szCards').querySelectorAll('input[data-origin="auto"]').forEach(i=>{i.value='';szSetOrigin(i,null)});szRender()});
 $('szMin').addEventListener('input',szRender);
-// Used by language.js: carry only the reader's own entries; copied equities are tied to an analysis and are dropped.
+// Used by language.js: carry the reader's own entries and the sync choice; synced equities come from the next analysis.
 window.SizingSync={
- snapshot:()=>{const v={};document.querySelectorAll('#szMin,#szCards input').forEach(i=>{if(!i.dataset.origin)v[i.id]=i.value});return v},
- restore(v){if(!v)return;for(const [id,val] of Object.entries(v)){const i=document.getElementById(id);if(i){i.value=val;szSetOrigin(i,null)}}szSetMode('none')},
+ snapshot:()=>{const values={},user=[];document.querySelectorAll('#szMin,#szCards input').forEach(i=>{if(i.dataset.origin!=='auto')values[i.id]=i.value;if(i.dataset.origin==='user')user.push(i.id)});return {values,user,auto:$('szAuto').checked}},
+ restore(v){if(!v)return;const values=v.values||v;for(const [id,val] of Object.entries(values)){const i=document.getElementById(id);if(i){i.value=val;szSetOrigin(i,(v.user||[]).includes(id)?'user':null)}}if(v.auto!==undefined)$('szAuto').checked=v.auto;szSetMode('none')},
 };
 szBuild();szSetMode('none');

@@ -24,12 +24,12 @@ en:{
  edgeLine:(b,p,l,e)=>`Edge per 1 staked = b × p − (chance of losing) = ${b} × ${p} − ${l} = ${e}.`,
  sens:(p,f)=>`If the true p were 5 points lower (${p}), full Kelly would be ${f}. Small errors in p move the Kelly fraction a lot.`,
  sync:{
-  manual:'Manual example. Analyze a hand where you face a bet and this section will update from it automatically.',
+  manual:'Manual example. When the current hand has a bet to call, this section switches to it automatically after each analysis.',
   synced:'Synced with the current hand analysis. The outcome table comes from that hand and updates every time you analyze. It is a hypothetical fixed-outcome teaching model: your real call is fixed, and nothing here recommends a different wager. Your bankroll and cap are never taken from the hand.',
   noCall:'The current hand has no bet to call, so it has no fixed payout b: any bet you choose would change who calls or folds and what they hold. Kelly cannot be derived from this hand, and no bet size is inferred from equity. The numbers below are your own manual example, not the hand’s.',
   noPayout:'After rake this pot pays nothing for the call, so there is no positive payout b to use. The numbers below are your own manual example, not the hand’s.',
-  stale:'The hand inputs changed after the last analysis, so its Kelly model is no longer current and has been cleared. Analyze again to resync. The numbers below are your own manual example.',
-  detached:'You switched to your own classical numbers, so this section is not using the hand. Analyze the hand again to resync.'},
+  stale:'The hand is changing or incomplete, so the previous Kelly model was cleared. It updates automatically when the new analysis finishes. The numbers below are your own manual example.',
+  detached:'You switched to your own classical numbers, so this section is not using the hand. Editing betting numbers keeps your choice; it resyncs when the cards, opponents, range or precision change.'},
  sourceHand:c=>`Source: current hand · hypothetical fixed-outcome model · the call is fixed at ${c}`,sourceManual:'Source: your manual example · not from the hand',
  hand:{
   head:['Outcome','Probability','Net per chip called','Chips on this call'],win:'Outright win',split:n=>`Split ${n} ways (1/${n} of the pot)`,loss:'Loss',total:'Total',
@@ -91,12 +91,12 @@ zh:{
  edgeLine:(b,p,l,e)=>`每 1 注碼的優勢 = b × p − 輸的機會 = ${b} × ${p} − ${l} = ${e}。`,
  sens:(p,f)=>`如果真實的 p 低 5 個百分點（${p}），完整凱利會變成 ${f}。p 的微小誤差會大幅改變凱利比例。`,
  sync:{
-  manual:'手動例子。分析一手需要跟注的牌後，這部分會自動按該手牌更新。',
+  manual:'手動例子。當目前的牌局有需要跟注的注碼時，每次分析後這部分都會自動改用該手牌。',
   synced:'已與目前的牌局分析同步。結果表來自該手牌，每次分析都會自動更新。這是一個假設性的固定結果教學模型：你實際的跟注金額是固定的，這裏並不建議任何其他注碼。你的資金及上限永遠不會從牌局取得。',
   noCall:'目前這手牌沒有需要跟注的注碼，所以沒有固定賠付 b：你選擇的任何下注額都會改變誰跟注或棄牌，以及他們持有的手牌。凱利無法從這手牌推算，亦不會從權益推斷下注額。下面的數字是你自己的手動例子，並非來自這手牌。',
   noPayout:'扣除抽水後，這個底池對跟注沒有任何賠付，所以沒有正數的 b 可用。下面的數字是你自己的手動例子，並非來自這手牌。',
-  stale:'上次分析後牌局資料已經改變，所以之前的凱利模型已不再是最新，並已清除。請再分析一次以重新同步。下面的數字是你自己的手動例子。',
-  detached:'你已改用自己的經典數字，所以這部分沒有使用牌局資料。再分析這手牌即可重新同步。'},
+  stale:'牌局資料正在改變或未完整，所以之前的凱利模型已清除。新的分析完成後會自動更新。下面的數字是你自己的手動例子。',
+  detached:'你已改用自己的經典數字，所以這部分沒有使用牌局資料。修改下注數字會保留你的選擇；當底牌、公共牌、對手、範圍或精確度改變時，便會重新同步。'},
  sourceHand:c=>`來源：目前牌局 · 假設性的固定結果模型 · 跟注固定為 ${c}`,sourceManual:'來源：你的手動例子 · 並非來自牌局',
  hand:{
   head:['結果','機率','每投入 1 籌碼的淨結果','這次跟注的籌碼'],win:'獨贏',split:n=>`${n} 人平分（取得底池的 1/${n}）`,loss:'輸',total:'合計',
@@ -236,14 +236,18 @@ function kSetMode(mode){
  $('kManual').hidden=mode==='synced';$('kHandModel').hidden=mode!=='synced';
  kRenderNote();kRender();
 }
+function kPending(on){$('kelly').classList.toggle('pending',on);$('kelly').setAttribute('aria-busy',on?'true':'false')}
+document.addEventListener('pokerlantern:pending',()=>kPending(true));
 document.addEventListener('pokerlantern:result',e=>{
- const {r,x}=e.detail;if(!(x.call>0)){kSetMode('noCall');return}
+ const {r,x}=e.detail;kPending(false);
+ // Your own-numbers choice survives betting edits (same card probabilities); new cards resync.
+ if(kMode==='detached'&&e.detail.reused){kRender();return}if(!(x.call>0)){kSetMode('noCall');return}
  const final=x.pot+x.call,rake=x.rake>0?Math.min(x.rakeCap>0?x.rakeCap:Infinity,x.rake/100*final):0;
  if(!(Kelly.callPayout(x.pot,x.call,rake)>0)){kSetMode('noPayout');return}
  const model=Kelly.handOutcomes(r,x.pot,x.call,rake);
  kHand={r,x,rake,net:model.net,outcomes:model.outcomes,call:x.call};kSetMode('synced');
 });
-document.addEventListener('pokerlantern:invalidate',()=>{if(['synced','noCall','noPayout'].includes(kMode))kSetMode('stale')});
+document.addEventListener('pokerlantern:invalidate',()=>{kPending(false);if(['synced','noCall','noPayout'].includes(kMode))kSetMode('stale')});
 $('kUseManual').addEventListener('click',()=>{if(kMode==='synced')kSetMode('detached')});
 ['kP','kB','kPush','kBankroll','kCap'].forEach(id=>['input','change'].forEach(ev=>$(id).addEventListener(ev,kRender)));
 // Used by language.js. The classical fields only ever hold the reader's own numbers, so they can be carried as they are.
