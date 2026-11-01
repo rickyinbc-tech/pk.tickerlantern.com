@@ -1,0 +1,8 @@
+{
+  "name": "poker-lantern",
+  "account_id": "4a455f6672f20afab8c1cd2b41f6f8ec",
+  "compatibility_date": "2026-10-22",
+  "assets": {"directory": "./public"},
+  "routes": [{"pattern": "pk.tickerlantern.com", "custom_domain": true}],
+  "workers_dev": false
+}
