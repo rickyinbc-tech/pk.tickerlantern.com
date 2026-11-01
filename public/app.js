@@ -195,6 +195,8 @@ function invalidate(){if(worker){worker.terminate();worker=null}resetButton();$(
 $('example').addEventListener('click',example);example();
 // A result applies only to the exact inputs used in its calculation.
 document.querySelectorAll('.setup input, .setup select').forEach(el=>el.addEventListener('change',()=>{const msg=$('error').textContent;invalidate();if(el.classList.contains('quick'))$('error').textContent=msg;if(el.id==='range'||el.id==='rangeCustom')drawRange()}));
+// Clear old hand and Kelly results immediately while text or numeric inputs are being edited.
+document.querySelectorAll('.setup input').forEach(el=>el.addEventListener('input',()=>{invalidate();if(el.id==='rangeCustom')drawRange()}));
 
 /* ---------- Calculation ---------- */
 $('calculate').addEventListener('click',()=>{

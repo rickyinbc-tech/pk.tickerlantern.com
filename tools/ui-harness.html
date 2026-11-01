@@ -11,8 +11,12 @@ function check(name,cond,info=''){results.push({name,ok:!!cond,info:cond?'':Stri
 let w,d;const $=id=>d.getElementById(id);
 const set=(id,v,ev='change')=>{$(id).value=v;$(id).dispatchEvent(new w.Event(ev,{bubbles:true}))};
 const txt=id=>$(id).textContent;
-async function page(url){w=await load(url);d=w.document;await until(()=>w.Kelly&&$('kFull')&&txt('kFull'))}
-async function analyze(){$('calculate').click();await until(()=>!$('output').hidden||txt('error'))}
+let resultCount=0;const watch=()=>d.addEventListener('pokerlantern:result',()=>resultCount++);
+async function page(url){w=await load(url);d=w.document;watch();await until(()=>w.Kelly&&$('kFull')&&txt('kFull'))}
+// Resolves on a new result event (even when inputs are unchanged) or on a validation error.
+async function analyze(){const n=resultCount;$('error').textContent='';$('calculate').click();await until(()=>resultCount>n||txt('error'));await sleep(0)}
+const mode=()=>$('kSync').dataset.mode;
+const handView=()=>`mode=${mode()} p=${$('kP').value} b=${$('kB').value} source=${txt('kSource')}`;
 
 async function run(){
  /* ---------- English: calculator ---------- */
@@ -42,46 +46,91 @@ async function run(){
  set('kCap','-1','input');check('negative cap rejected',txt('kError').includes('cap'),txt('kError'));set('kCap','','input');
  check('sensitivity line shown',txt('kSensitivity').includes('5 points lower'),txt('kSensitivity'));
 
- /* ---------- English: link to hand results ---------- */
- check('import disabled before any analysis',$('kImport').disabled&&txt('kImportHint').includes('Analyze'),txt('kImportHint'));
- await analyze();
+ /* ---------- English: automatic sync with the hand ---------- */
+ set('kP','57','input');set('kB','1','input');set('kPush','0','input');set('kCap','250','input');set('kBankroll','2000','input');
+ check('no import button any more',!$('kImport'));
+ check('starts as a manual example',mode()==='manual'&&txt('kSync').includes('Manual example')&&txt('kSource').includes('manual'),handView());
+ check('source tags hidden before sync',$('kPSrc').hidden&&$('kBSrc').hidden&&$('kPushSrc').hidden);
+ await analyze();// default example: no bet to call
  check('hand analysis still works',!$('output').hidden&&txt('action').length>0,txt('error'));
- check('no bet to call keeps import disabled',$('kImport').disabled&&txt('kImportHint').includes('fixed price'),txt('kImportHint'));
- set('kP','55','input');set('kB','1','input');
- set('holeText','Js Jh');set('boardText','Qd 7c 2s');set('pot','150');set('call','100');set('stack','100');set('range','20');set('bb','2');
+ check('no call: explains there is no fixed payout',mode()==='noCall'&&txt('kSync').includes('no fixed payout b')&&txt('kSync').includes('no bet size is inferred from equity'),txt('kSync'));
+ check('no call: Kelly numbers stay manual, not from the hand',$('kP').value==='57'&&$('kB').value==='1'&&txt('kSource').includes('not from the hand')&&$('kHandNote').hidden&&$('kExposure').hidden,handView());
+ set('holeText','Js Jh');
+ check('changing cards after a no-call result marks it stale',mode()==='stale'&&txt('kSync').includes('no longer current'),txt('kSync'));
+ set('boardText','Qd 7c 2s');set('pot','150');set('call','100');set('stack','100');set('range','20');set('bb','2');
  await analyze();
- check('analysis alone does not change Kelly inputs',$('kP').value==='55'&&$('kB').value==='1',$('kP').value+' '+$('kB').value);
- check('import enabled when facing a bet',!$('kImport').disabled);
- $('kImport').click();
  const winTie=txt('winTie').split(' / '),eq=txt('equity');
- check('p imported from outright win, not equity',Math.abs(parseFloat($('kP').value)-parseFloat(winTie[0]))<.06&&$('kP').value!==String(parseFloat(eq)),`${$('kP').value} vs win ${winTie[0]}, equity ${eq}`);
- check('b = pot ÷ call = 1.5',$('kB').value==='1.5',$('kB').value);
- const note=txt('kImportNote');
- check('note shows win, tie and equity separately',note.includes('outright win')&&note.includes('tie')&&note.includes('showdown equity'),note);
- check('note says ties count as losses',note.includes('Ties')&&note.includes('counted as losses'),note);
- check('note says a partial call is impossible',note.includes('cannot call part of a bet'),note);
- check('note states all-in payout assumption',note.includes('all-in'),note);
- check('exposure line compares the call with the bankroll',!$('kExposure').hidden&&txt('kExposure').includes('100 = 5.00%'),txt('kExposure'));
- set('kBankroll','150','input');check('exposure above full Kelly is not a partial-call suggestion',txt('kExposure').includes('does not mean you can call a smaller amount'),txt('kExposure'));
+ check('syncs automatically after analysis',mode()==='synced'&&txt('kSync').startsWith('Synced'),handView());
+ check('p = outright win, not equity',Math.abs(parseFloat($('kP').value)-parseFloat(winTie[0]))<.06&&Math.abs(parseFloat($('kP').value)-parseFloat(eq))>.2,`${$('kP').value} vs win ${winTie[0]}, equity ${eq}`);
+ check('b = pot ÷ call = 1.5 and push = 0',$('kB').value==='1.5'&&$('kPush').value==='0',handView());
+ check('values from the hand are tagged',!$('kPSrc').hidden&&txt('kPSrc')==='from current hand'&&!$('kBSrc').hidden&&txt('kPushSrc').includes('ties counted as losses'));
+ check('source names the fixed call',txt('kSource')==='Source: current hand · fixed call of 100',txt('kSource'));
+ check('bankroll and cap are preserved',$('kBankroll').value==='2000'&&$('kCap').value==='250'&&$('kTable').rows[3].cells[2].textContent.includes('capped at 250'),$('kTable').rows[3]&&$('kTable').rows[3].cells[2].textContent);
+ const note=txt('kHandNote');
+ check('note shows win, tie and equity separately',note.includes('outright win')&&note.includes('tie')&&note.includes('showdown equity')&&note.includes('three different numbers'),note);
+ check('note: ties counted as losses, equity not used as p',note.includes('counted as losses')&&note.includes('Equity is not used as p'),note);
+ check('note: fixed call, no partial call',note.includes('cannot call part of a bet'),note);
+ check('note: all-in payout and side pots',note.includes('all-in')&&note.includes('Side pots'),note);
+ check('note: range uncertainty',note.includes('range itself is only an assumption')||note.includes('range you assumed'),note);
+ check('note: bankroll and cap entered by you',note.includes('entered by you'),note);
+ check('exposure compares the call with the bankroll',!$('kExposure').hidden&&txt('kExposure').includes('100 = 5.00%'),txt('kExposure'));
+ set('kBankroll','150','input');
+ check('editing the bankroll keeps the sync',mode()==='synced'&&$('kBankroll').value==='150',handView());
+ check('large exposure is not a partial-call suggestion',txt('kExposure').includes('does not mean you can call a smaller amount'),txt('kExposure'));
  set('kBankroll','2000','input');
- set('call','50');
- check('changing the hand marks the example as stale',txt('kImportNote').includes('changed since'),txt('kImportNote'));
- check('changing the hand disables import',$('kImport').disabled);
- $('kRemove').click();check('remove example hides note and exposure',$('kImportNote').hidden&&$('kExposure').hidden);
- set('stack','200');set('call','50');set('pot','100');await analyze();$('kImport').click();
- check('not-all-in warning shown',txt('kImportNote').includes('not all-in'),txt('kImportNote'));
- set('rake','5');set('rakeCap','3');await analyze();$('kImport').click();
- check('rake reduces b: (100 − 3) ÷ 50 = 1.94',$('kB').value==='1.94',$('kB').value);
- set('opponents','3');set('range','100');await analyze();$('kImport').click();
- check('multiway warning shown',txt('kImportNote').includes('several opponents'),txt('kImportNote'));
- check('simulation uncertainty shown',txt('kImportNote').includes('sampling error'),txt('kImportNote'));
+ const pSynced=$('kP').value;await analyze();
+ check('recalculating unchanged inputs stays synced',mode()==='synced'&&$('kB').value==='1.5',handView());
+ // Each kind of hand change clears the sync, and a new analysis resyncs.
+ set('holeText','Ah Kh');
+ check('changed card: sync cleared',mode()==='stale'&&$('output').hidden,handView());
+ check('changed card: hand numbers replaced by the manual example',$('kP').value==='57'&&$('kB').value==='1'&&txt('kSource').includes('not from the hand'),handView());
+ check('changed card: note, exposure and tags hidden',$('kHandNote').hidden&&$('kExposure').hidden&&$('kPSrc').hidden);
+ await analyze();check('changed card: resyncs on analysis',mode()==='synced'&&$('kP').value!=='57'&&$('kP').value!==pSynced,handView());
+ set('range','50');check('changed range: sync cleared',mode()==='stale'&&$('kP').value==='57',handView());
+ await analyze();check('changed range: resyncs',mode()==='synced',handView());
+ set('pot','200','input');check('editing pot clears sync immediately before blur',mode()==='stale'&&$('output').hidden,handView());
+ set('pot','200');check('changed pot: sync cleared',mode()==='stale',handView());
+ await analyze();check('changed pot: b = 200 ÷ 100 = 2',mode()==='synced'&&$('kB').value==='2',handView());
+ set('rake','5');check('changed rake: sync cleared',mode()==='stale',handView());set('rakeCap','3');
+ await analyze();check('changed rake: b = (200 − 3) ÷ 100 = 1.97',$('kB').value==='1.97'&&txt('kHandNote').includes('(200 − 3) ÷ 100'),handView());
+ set('stack','300');await analyze();check('not all-in: future-betting warning',txt('kHandNote').includes('not all-in'),txt('kHandNote'));
+ set('opponents','3');set('range','100');await analyze();
+ check('multiway: side pots and opponents warning',txt('kHandNote').includes('several opponents'),txt('kHandNote'));
+ check('simulation: sampling-error warning',txt('kHandNote').includes('sampling error'),txt('kHandNote'));
+ set('opponents','1');await analyze();
+ check('heads-up flop: exact but range is an assumption',txt('kHandNote').includes('range itself is only an assumption'),txt('kHandNote'));
+ // Editing p or b by hand detaches from the hand; a new analysis resyncs.
+ set('kP','61','input');
+ check('editing p detaches from the hand',mode()==='detached'&&txt('kSync').includes('You edited')&&$('kP').value==='61'&&$('kExposure').hidden&&txt('kSource').includes('not from the hand'),handView());
+ await analyze();check('analysis after detaching resyncs',mode()==='synced'&&$('kP').value!=='61',handView());
+ // Invalid inputs: the old result is cleared and nothing syncs.
+ set('call','500');check('invalid change clears the sync',mode()==='stale',handView());
+ await analyze();check('invalid call > stack: error, no sync',txt('error').length>0&&mode()==='stale'&&txt('kSource').includes('not from the hand'),handView()+' '+txt('error'));
+ set('call','100');set('holeText','Zz Qq');
+ await analyze();check('invalid cards: error, no sync',txt('error').length>0&&mode()==='stale',handView()+' '+txt('error'));
+ set('holeText','Js Jh');await analyze();check('valid again: resyncs',mode()==='synced',handView());
+ // After a synced result, a no-call hand never inherits the old numbers.
+ set('call','0');check('call set to zero clears the sync',mode()==='stale'&&$('kP').value==='61',handView());
+ await analyze();check('no call after a sync: manual numbers, explanation shown',mode()==='noCall'&&$('kP').value==='61'&&$('kHandNote').hidden,handView());
+ set('call','100');await analyze();check('facing a bet again resyncs',mode()==='synced',handView());
+ $('example').click();check('loading the example clears the sync',mode()==='stale',handView());
 
- /* ---------- Language switch keeps Kelly inputs ---------- */
- set('kBankroll','5000','input');set('kP','58','input');
- const loaded=new Promise(res=>frame.onload=res);d.querySelector('.languages a[href="zh.html"]').click();await loaded;
- w=frame.contentWindow;d=w.document;await until(()=>w.Kelly&&txt('kFull'));
- check('language switch keeps the bankroll',$('kBankroll').value==='5000',$('kBankroll').value);
- check('language switch keeps p',$('kP').value==='58',$('kP').value);
+ /* ---------- Language switch ---------- */
+ set('kP','57','input');set('kB','1','input');
+ set('holeText','Js Jh');set('boardText','Qd 7c 2s');set('pot','150');set('call','100');set('stack','100');set('range','20');set('kBankroll','5000','input');set('kCap','400','input');
+ await analyze();check('synced before switching language',mode()==='synced',handView());
+ let loaded=new Promise(res=>frame.onload=res);d.querySelector('.languages a[href="zh.html"]').click();await loaded;
+ w=frame.contentWindow;d=w.document;watch();await until(()=>w.Kelly&&txt('kFull'));
+ await until(()=>mode()==='synced'||txt('error'));
+ check('switch with a current result: zh recalculates and resyncs',mode()==='synced'&&txt('kSync').startsWith('已與目前的牌局分析同步')&&!$('output').hidden,handView());
+ check('switch keeps hand inputs',$('holeText').value==='J♠ J♥'&&$('boardText').value==='Q♦ 7♣ 2♠'&&$('pot').value==='150'&&$('call').value==='100'&&$('range').value==='20',$('holeText').value+' '+$('boardText').value);
+ check('switch keeps bankroll and cap',$('kBankroll').value==='5000'&&$('kCap').value==='400',$('kBankroll').value+' '+$('kCap').value);
+ check('switch keeps rake; zh resynced b = (150 − 3) ÷ 100 = 1.47',$('rake').value==='5'&&$('rakeCap').value==='3'&&$('kB').value==='1.47'&&txt('kSource').includes('固定跟注 100'),handView());
+ set('pot','160');check('zh change clears the sync',mode()==='stale'&&txt('kSync').includes('不再是最新')&&$('kP').value==='57',handView());
+ loaded=new Promise(res=>frame.onload=res);d.querySelector('.languages a[href="index.html"]').click();await loaded;
+ w=frame.contentWindow;d=w.document;watch();await until(()=>w.Kelly&&txt('kFull'));await sleep(300);
+ check('switch without a current result: starts manual, no stale numbers',mode()==='manual'&&$('kP').value==='57'&&$('kB').value==='1'&&$('output').hidden,handView());
+ check('switch without a current result keeps the changed pot and bankroll',$('pot').value==='160'&&$('kBankroll').value==='5000',$('pot').value);
 
  /* ---------- Traditional Chinese ---------- */
  await page('/zh.html');
@@ -92,15 +141,18 @@ async function run(){
  set('kP','0','input');set('kPush','100','input');check('zh all-push case has no unique fraction',txt('kFull')==='—'&&txt('kWorked').includes('沒有唯一的凱利比例'),txt('kWorked'));
  set('kP','60','input');set('kPush','50','input');check('zh validation message',txt('kError').includes('不可超過 100%'),txt('kError'));
  set('kP','55','input');set('kPush','0','input');
- check('zh import disabled before analysis',$('kImport').disabled&&txt('kImportHint').includes('請先分析'),txt('kImportHint'));
+ check('zh starts manual',mode()==='manual'&&txt('kSync').startsWith('手動例子'),txt('kSync'));
+ await analyze();check('zh no call explanation',mode()==='noCall'&&txt('kSync').includes('沒有固定賠付 b')&&txt('kSync').includes('不會從權益推斷下注額'),txt('kSync'));
  set('holeText','Js Jh');set('boardText','Qd 7c 2s');set('pot','150');set('call','100');set('stack','100');set('range','20');
- await analyze();$('kImport').click();
- const zn=txt('kImportNote');
+ await analyze();
+ check('zh syncs automatically',mode()==='synced'&&txt('kPSrc')==='來自目前牌局'&&txt('kPushSrc').includes('平手當作輸'),handView());
+ const zn=txt('kHandNote');
+ check('zh note: bankroll entered by you',zn.includes('由你輸入'),zn);
  check('zh note: win/tie/equity separately',zn.includes('獨贏')&&zn.includes('平手')&&zn.includes('攤牌權益'),zn);
  check('zh note: no partial call',zn.includes('不能只跟注一部分'),zn);
  check('zh exposure line',txt('kExposure').includes('撲克資金'),txt('kExposure'));
  check('zh teaching section present',d.querySelector('.kelly-teach').textContent.includes('權益不等於勝出機率'));
- check('no untranslated English in zh Kelly output',!/[A-Za-z]{4,}/.test(txt('kVerdict')+txt('kExposure')+zn.replace(/Kelly|Wiley|Online|Library/g,'')),txt('kVerdict'));
+ check('no untranslated English in zh Kelly output',!/[A-Za-z]{4,}/.test(txt('kVerdict')+txt('kExposure')+txt('kSync')+txt('kSource')+zn),txt('kVerdict'));
 }
 run().catch(e=>results.push({name:'harness error',ok:false,info:e.stack||String(e)})).finally(()=>{document.getElementById('result').textContent='RESULTS:'+JSON.stringify(results)});
 </script></body></html>
