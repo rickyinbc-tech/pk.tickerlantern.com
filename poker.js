@@ -48,7 +48,7 @@ function simulate(hole,board,opponents,trials,random=Math.random,options={}){
  const rangeCombos=[];if(inRange)for(let i=0;i<len;i++)for(let j=i+1;j<len;j++)if(inRange[pool[i]*52+pool[j]])rangeCombos.push(pool[i],pool[j]);
  if(inRange&&!rangeCombos.length)throw Error('RANGE_IMPOSSIBLE');
  const swap=(i,j)=>{const a=pool[i],b=pool[j];pool[i]=b;pool[j]=a;pos[b]=i;pos[a]=j};
- const hero=new Array(2+5),opp=new Array(7),hands=new Int16Array(2*opponents),cats=new Float64Array(9);
+ const hero=new Array(2+5),opp=new Array(7),hands=new Int16Array(2*opponents),cats=new Float64Array(9),splits=new Float64Array(opponents+2);// splits[n]: hero shares the pot with n − 1 others
  hero[0]=hole[0];hero[1]=hole[1];for(let i=0;i<board.length;i++)hero[2+i]=board[i];
  let wins=0,ties=0,sum=0,squares=0;
  for(let t=0;t<trials;t++){
@@ -65,11 +65,11 @@ function simulate(hole,board,opponents,trials,random=Math.random,options={}){
   for(let i=0;i<5;i++)opp[2+i]=hero[2+i];
   for(let o=0;o<opponents;o++){opp[0]=hands[2*o];opp[1]=hands[2*o+1];const v=score(opp);if(v>best){best=v;n=1}else if(v===best)n++}
   for(let o=0;o<2*opponents;o++)used[hands[o]]=0;
-  let share=0;if(best===h){share=1/n;if(n===1)wins++;else ties++}sum+=share;squares+=share*share;
+  let share=0;if(best===h){share=1/n;if(n===1)wins++;else{ties++;splits[n]++}}sum+=share;squares+=share*share;
   if(onProgress&&(t+1)%every===0)onProgress((t+1)/trials);
  }
  const equity=sum/trials,se=Math.sqrt(Math.max(0,squares/trials-equity*equity)/trials);
- return {equity,wins:wins/trials,ties:ties/trials,se,trials,exact:false,categories:[...cats].map(c=>c/trials)};
+ return {equity,wins:wins/trials,ties:ties/trials,se,trials,exact:false,categories:[...cats].map(c=>c/trials),splits:[...splits].map(c=>c/trials),losses:(trials-wins-ties)/trials,lossCount:trials-wins-ties};
 }
 
 /* Exact heads-up enumeration on the flop, turn or river: every legal (opponent combination, runout) pair
@@ -88,7 +88,7 @@ function enumerateHeadsUp(hole,board,options={}){
   if(onProgress&&ri%50===49)onProgress((ri+1)/runouts.length);
  });
  if(!count)throw Error('RANGE_IMPOSSIBLE');
- return {equity:sum/count,wins:wins/count,ties:ties/count,se:0,trials:count,exact:true,categories:[...cats].map(c=>c/count)};
+ return {equity:sum/count,wins:wins/count,ties:ties/count,se:0,trials:count,exact:true,categories:[...cats].map(c=>c/count),splits:[0,0,ties/count],losses:(count-wins-ties)/count,lossCount:count-wins-ties};
 }
 
 function analyze(d,onProgress){

@@ -69,6 +69,55 @@ near(capped[1].expectedProfit,200*.2);
 // A fixed call: win the existing pot after rake, or lose the call.
 near(K.callPayout(150,100,3),1.47);near(K.callPayout(150,100),1.5);assert(Number.isNaN(K.callPayout(150,0)));assert(Number.isNaN(K.callPayout(150,10,-1)));
 
+// Multi-outcome Kelly: the general solver agrees with the closed forms and finds the true maximum.
+const O=(...xs)=>xs.map(([p,r])=>({p,r}));
+for(const [p,b] of [[.6,1],[.55,1],[.4,2],[.3,4]])near(K.analyzeOutcomes(O([p,b],[1-p,-1])).full,K.analyzeKelly({p,b}).full,1e-9);
+near(K.analyzeOutcomes(O([.5,1],[.2,0],[.3,-1])).full,.25,1e-9);
+assert.equal(K.analyzeOutcomes(O([.5,1],[.5,-1])).kind,'noEdge');assert.equal(K.analyzeOutcomes(O([.3,1],[.7,-1])).full,0);
+assert.equal(K.analyzeOutcomes(O([1,.5])).kind,'noLoss');assert.equal(K.analyzeOutcomes(O([.7,2],[.3,0])).full,1);
+// Boundary: negative outcomes that never lose the whole stake can leave G still rising at f = 1 (no root of G′).
+const bnd=K.analyzeOutcomes(O([.8,1],[.2,-.1]));assert.equal(bnd.kind,'boundary');assert.equal(bnd.full,1);near(bnd.slopeAtMax,.8/2-.02/.9,1e-12);
+assert(bnd.slopeAtMax>0&&K.growth(1,bnd)>K.growth(.999,bnd),'growth still rising at 100%');
+near(K.analyzeOutcomes(O([.1,1],[.9,-.1])).full,.1,1e-9);// r > −1 but an interior root exists
+for(let i=0;i<300;i++){// random distributions with splits, partial losses and total losses
+ const n=2+Math.floor(rng()*4),w=Array.from({length:n},()=>rng()),t=w.reduce((a,b)=>a+b,0),out=w.map(x=>({p:x/t,r:-1+3*rng()}));if(rng()<.5)out[0].r=-1;
+ const k=K.analyzeOutcomes(out);if(k.kind==='noEdge'){assert(K.expectation(out)<=1e-12);continue}
+ let bestF=0,bestG=0;for(let f=0;f<=1+1e-12;f+=1e-4){const g=K.growth(Math.min(f,1),k);if(g>bestG){bestG=g;bestF=Math.min(f,1)}}
+ assert(Math.abs(bestF-k.full)<3e-4,`argmax ${bestF} vs ${k.full} (${k.kind})`);if(k.kind==='edge')assert(k.full<1);else assert.equal(k.full,1);
+}
+assert.equal(K.analyzeOutcomes(O([.5,1],[.4,-1])).error,'P_SUM');assert.equal(K.analyzeOutcomes(O([.5,1],[.5,-1.5])).error,'OUTCOMES');assert.equal(K.analyzeOutcomes([]).error,'OUTCOMES');
+
+// Hand outcomes: engine splits by number of winners; probabilities sum to 1 and E[r] × call equals the showdown EV.
+const evCheck=(r,pot,call,rake=0,label='')=>{
+ const m=K.handOutcomes(r,pot,call,rake),sum=m.outcomes.reduce((s,o)=>s+o.p,0);near(sum,1,1e-9);
+ near(r.wins+r.splits.reduce((s,x)=>s+x,0)+r.losses,1,1e-9);near(r.ties,r.splits.reduce((s,x)=>s+x,0),1e-9);
+ near(K.expectation(m.outcomes)*call,r.equity*(pot+call-rake)-call,1e-6);return K.analyzeOutcomes(m.outcomes);
+};
+// Ricky's royal-board case: every showdown is a 2-way split; pot 100, call 50 → +0.5 per chip, EV +25, no possible loss.
+const rk=enumerateHeadsUp([c(2,1),c(3,1)],royal),rkK=evCheck(rk,100,50);
+assert.deepEqual([rk.wins,rk.ties,rk.splits[2],rk.losses,rk.lossCount],[0,1,1,0,0]);near(rkK.edge*50,25);assert.equal(rkK.kind,'noLoss');assert.equal(rkK.full,1);
+assert.equal(evCheck(rk,100,100,10).kind,'noEdge');// net 190, split 95 < call 100: every outcome loses 5
+// Multiway all-tie (sampled): 3 opponents → 4-way splits only.
+const rk4=simulate([c(2,1),c(3,1)],royal,3,2000,rng);assert.equal(rk4.splits[4],1);assert.equal(rk4.lossCount,0);near(evCheck(rk4,300,50).edge,(350/4-50)/50);
+// Exact boundary hand: Kd 3d on Th 2c Qd Jc Ah never loses; with rake a 2-way split loses 5% of the call.
+const bh=enumerateHeadsUp([c(13,2),c(3,2)],[c(10,1),c(2,3),c(12,2),c(11,3),c(14,1)]);assert.equal(bh.lossCount,0);assert(bh.ties>0&&bh.wins>0);
+const bhK=evCheck(bh,100,100,10);assert.equal(bhK.kind,'boundary');assert.equal(bhK.full,1);
+assert.equal(evCheck(bh,100,50).kind,'noLoss');// no rake: split is +0.5, nothing negative
+// Positive split payoff with real losses, exact vs sampled, rake, multiway.
+const wheel=[c(14,2),c(9,3)],wb=[c(2,0),c(3,2),c(4,1),c(5,3),c(13,1)],wx=enumerateHeadsUp(wheel,wb),wk=evCheck(wx,100,50);
+assert(wx.ties>.1&&wx.losses>0&&wk.kind==='edge');near(wk.outcomes.find(o=>o.kind==='split').r,.5);
+const ws=simulate(wheel,wb,1,40000,rng);evCheck(ws,100,50);assert(Math.abs(ws.equity-wx.equity)<4*ws.se+1e-3);
+for(const [opp,range,pot,call,rakeAmt] of [[2,100,120,40,6],[3,30,200,80,0],[4,100,90,30,3]]){const r=simulate([c(10,0),c(10,1)],[c(10,2),c(4,1),c(4,3)],opp,8000,rng,{range});evCheck(r,pot,call,rakeAmt,`${opp} opp`)}
+for(let t=0;t<200;t++){const d=[...Array(52).keys()];for(let i=0;i<7;i++){const j=i+Math.floor(rng()*(52-i));[d[i],d[j]]=[d[j],d[i]]}evCheck(enumerateHeadsUp(d.slice(0,2),d.slice(2,7)),50+Math.floor(rng()*200),10+Math.floor(rng()*60),Math.floor(rng()*5))}
+
+// Upgrade safety: every local CSS/JS reference in both pages carries one shared version; the worker reuses poker.js's URL.
+const versions=new Set();
+for(const page of ['index.html','zh.html']){const html=fs.readFileSync(path.join(__dirname,page),'utf8'),refs=[...html.matchAll(/(?:src|href)="((?:style\.css|[a-z-]+\.js)[^"]*)"/g)].map(m=>m[1]);
+ assert.deepEqual(refs.map(r=>r.split('?')[0]),['style.css','poker.js','kelly.js','app.js','kelly-ui.js','language.js'],page);
+ for(const r of refs){const v=/\?v=([\w-]+)$/.exec(r);assert(v,`${page}: ${r} is not versioned`);versions.add(v[1])}}
+assert.equal(versions.size,1,'both pages must use the same asset version');
+const appSrc=fs.readFileSync(path.join(__dirname,'app.js'),'utf8');assert(/new Worker\(WORKER_URL\)/.test(appSrc)&&/WORKER_URL=document\.querySelector\('script\[src\^="poker\.js"\]'\)/.test(appSrc),'worker must load the versioned poker.js');
+
 // Deployment copy must match the source files.
 for(const f of ['index.html','zh.html','app.js','poker.js','kelly.js','kelly-ui.js','language.js','style.css'])assert.equal(fs.readFileSync(path.join(__dirname,'public',f),'utf8'),fs.readFileSync(path.join(__dirname,f),'utf8'),`public/${f} is out of date`);
 assert.deepEqual(fs.readdirSync(path.join(__dirname,'public')).sort(),['app.js','index.html','kelly-ui.js','kelly.js','language.js','poker.js','style.css','zh.html']);

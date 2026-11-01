@@ -190,6 +190,8 @@ function drawRange(){
 /* ---------- Example and state ---------- */
 function example(){const h=$('hole').querySelectorAll('select');h[0].value='9';h[1].value='22';$('board').querySelectorAll('select').forEach(s=>s.value='');$('position').value='button';$('opponents').value='1';$('bb').value=2;$('stack').value=200;$('pot').value=3;$('call').value=0;$('range').value='100';cardsChanged();invalidate()}
 let worker;
+// The worker runs the same versioned poker.js the page loaded, so a cached older engine is never paired with this page.
+const WORKER_URL=document.querySelector('script[src^="poker.js"]').getAttribute('src');
 function resetButton(){$('calculate').disabled=false;$('calculate').firstElementChild.textContent=TEXT.analyze}
 function invalidate(){if(worker){worker.terminate();worker=null}resetButton();$('output').hidden=true;$('empty').hidden=false;$('error').textContent='';document.dispatchEvent(new CustomEvent('pokerlantern:invalidate'))}
 $('example').addEventListener('click',example);example();
@@ -215,7 +217,7 @@ $('calculate').addEventListener('click',()=>{
  if(![x.bb,x.stack,x.pot,x.call].every(Number.isFinite)||x.bb<=0||x.stack<=0||x.pot<=0||x.call<0)return fail(E.numbers);
  if(x.call>x.stack)return fail(E.stack);if(x.call>x.pot)return fail(E.pot);
  if(!(x.rake>=0&&x.rake<=25)||!(x.rakeCap>=0))return fail(E.rake);if(!(x.range>=0.5&&x.range<=100))return fail(E.range);
- $('calculate').disabled=true;$('calculate').firstElementChild.textContent=TEXT.running(0);if(worker)worker.terminate();worker=new Worker('poker.js');
+ $('calculate').disabled=true;$('calculate').firstElementChild.textContent=TEXT.running(0);if(worker)worker.terminate();worker=new Worker(WORKER_URL);
  worker.onmessage=e=>{if(e.data.progress!==undefined){$('calculate').firstElementChild.textContent=TEXT.running(e.data.progress);return}
   resetButton();worker.terminate();worker=null;if(e.data.error)return fail(e.data.error==='RANGE_IMPOSSIBLE'?E.impossible:e.data.error==='DUPLICATE_CARDS'?E.dup:E.sim);show(e.data.result,x)};
  worker.onerror=()=>{resetButton();fail(E.sim)};
