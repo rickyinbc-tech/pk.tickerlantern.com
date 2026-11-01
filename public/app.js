@@ -191,7 +191,7 @@ function drawRange(){
 function example(){const h=$('hole').querySelectorAll('select');h[0].value='9';h[1].value='22';$('board').querySelectorAll('select').forEach(s=>s.value='');$('position').value='button';$('opponents').value='1';$('bb').value=2;$('stack').value=200;$('pot').value=3;$('call').value=0;$('range').value='100';cardsChanged();invalidate()}
 let worker;
 function resetButton(){$('calculate').disabled=false;$('calculate').firstElementChild.textContent=TEXT.analyze}
-function invalidate(){if(worker){worker.terminate();worker=null}resetButton();$('output').hidden=true;$('empty').hidden=false;$('error').textContent=''}
+function invalidate(){if(worker){worker.terminate();worker=null}resetButton();$('output').hidden=true;$('empty').hidden=false;$('error').textContent='';document.dispatchEvent(new CustomEvent('pokerlantern:invalidate'))}
 $('example').addEventListener('click',example);example();
 // A result applies only to the exact inputs used in its calculation.
 document.querySelectorAll('.setup input, .setup select').forEach(el=>el.addEventListener('change',()=>{const msg=$('error').textContent;invalidate();if(el.classList.contains('quick'))$('error').textContent=msg;if(el.id==='range'||el.id==='rangeCustom')drawRange()}));
@@ -269,4 +269,6 @@ function show(r,x){
  $('distTitle').textContent=TEXT.distTitle(exact,river);$('distNote').hidden=river;$('distNote').textContent=TEXT.distNote;
  const dist=$('dist');dist.replaceChildren();categories.forEach((v,i)=>{if(v<=0)return;const row=document.createElement('div');row.className='bar';row.innerHTML='<span></span><i><b></b></i><em></em>';row.children[0].textContent=TEXT.cats[i];row.querySelector('b').style.width=(v*100).toFixed(2)+'%';row.children[2].textContent=v>=.9995?'100%':v<.0005?'<0.1%':pct(v);dist.appendChild(row)});
  updateStreet();
+ // The Kelly section may use this result, but only when the reader asks it to.
+ document.dispatchEvent(new CustomEvent('pokerlantern:result',{detail:{r,x}}));
 }

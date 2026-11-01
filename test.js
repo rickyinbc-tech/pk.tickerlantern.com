@@ -43,7 +43,33 @@ assert(Math.abs(aaKK.equity-.773)<.012,`AA vs AA/KK ${aaKK.equity}`);
 assert.throws(()=>simulate([c(14,0),c(14,1)],[],2,10,rng,{range:.5}),/RANGE_IMPOSSIBLE/);
 assert.throws(()=>simulate([c(14,0),c(14,0)],[],1,10,rng),/DUPLICATE_CARDS/);
 
+// Kelly criterion: classical formula, push-aware generalization and edge cases.
+const K=require('./kelly.js'),near=(a,b,tol=1e-12)=>assert(Math.abs(a-b)<=tol,`${a} ≠ ${b}`);
+near(K.analyzeKelly({p:.6,b:1}).full,.2);near(K.analyzeKelly({p:.55,b:1}).full,.1);near(K.analyzeKelly({p:.4,b:2}).full,.1);
+for(let i=0;i<200;i++){const p=.05+.9*rng(),b=.1+5*rng(),k=K.analyzeKelly({p,b});if(k.kind==='edge')near(k.full,(b*p-(1-p))/b,1e-12);else assert.equal(k.full,0)}
+near(K.analyzeKelly({p:.5,b:1}).full,0);assert.equal(K.analyzeKelly({p:.5,b:1}).kind,'noEdge');// zero edge stakes nothing
+assert.equal(K.analyzeKelly({p:.3,b:1}).kind,'noEdge');assert.equal(K.analyzeKelly({p:0,b:5}).full,0);near(K.analyzeKelly({p:.3,b:1}).edge,-.4);
+near(K.analyzeKelly({p:.2,b:2}).breakEven,1/3);near(K.analyzeKelly({p:.2,b:1,push:.2}).breakEven,.4);
+assert.equal(K.analyzeKelly({p:1,b:1}).kind,'noLoss');assert.equal(K.analyzeKelly({p:1,b:1}).full,1);assert.equal(K.analyzeKelly({p:.7,b:1,push:.3}).full,1);
+assert.equal(K.analyzeKelly({p:0,b:1,push:1}).kind,'allPush');assert.equal(K.analyzeKelly({p:0,b:1,push:1}).full,0);
+near(K.analyzeKelly({p:.5,b:1,push:.2}).full,.25);// (1×0.5 − 0.3) ÷ (1 × 0.8)
+for(const [args,code] of [[{p:-.01,b:1},'P_RANGE'],[{p:1.01,b:1},'P_RANGE'],[{p:NaN,b:1},'P_RANGE'],[{p:.5,b:0},'B_RANGE'],[{p:.5,b:-1},'B_RANGE'],[{p:.5,b:Infinity},'B_RANGE'],[{p:.5,b:NaN},'B_RANGE'],[{p:.5,b:1,push:-.1},'PUSH_RANGE'],[{p:.6,b:1,push:.5},'P_PUSH_SUM']])assert.equal(K.analyzeKelly(args).error,code,JSON.stringify(args));
+// The Kelly fraction maximizes expected log growth (checked by brute-force search, with and without pushes).
+for(let i=0;i<60;i++){const push=i%2?.3*rng():0,p=(1-push)*rng(),b=.2+4*rng(),k=K.analyzeKelly({p,b,push});if(k.kind!=='edge')continue;
+ let bestF=0,bestG=0;for(let f=0;f<1;f+=1e-4){const g=K.growth(f,k);if(g>bestG){bestG=g;bestF=f}}assert(Math.abs(bestF-k.full)<2e-4,`argmax ${bestF} vs ${k.full}`)}
+// Fractional Kelly: half keeps ≈ 3/4 of the growth; 2× Kelly grows ≈ nothing (small edge); staking everything with a possible loss is ruin.
+const small=K.analyzeKelly({p:.51,b:1}),rowsSmall=K.kellyRows(small,1000);
+assert(rowsSmall[1].growthShare>.74&&rowsSmall[1].growthShare<.76,`half ${rowsSmall[1].growthShare}`);assert(Math.abs(rowsSmall[3].growthShare)<.03,`2x ${rowsSmall[3].growthShare}`);
+assert.equal(K.growth(1,K.analyzeKelly({p:.6,b:1})),-Infinity);assert.equal(K.kellyRows(K.analyzeKelly({p:.8,b:1}),100)[3].growth,-Infinity);// 2 × 60% → whole bankroll
+// The table-stack cap limits the illustrated stake but never the Kelly fraction.
+const capped=K.kellyRows(K.analyzeKelly({p:.6,b:1}),2000,250);
+[[.05,100,false,100],[.1,200,false,200],[.2,400,true,250],[.4,800,true,250]].forEach(([f,st,c,fin],i)=>{near(capped[i].fraction,f,1e-12);near(capped[i].stake,st,1e-9);assert.equal(capped[i].capped,c);near(capped[i].finalStake,fin,1e-9)});near(capped[2].actualFraction,.125);
+assert.equal(K.kellyRows(K.analyzeKelly({p:.6,b:1}),2000,null)[2].capped,false);assert.equal(K.kellyRows(K.analyzeKelly({p:.6,b:1}),2000,0)[0].finalStake,0);
+near(capped[1].expectedProfit,200*.2);
+// A fixed call: win the existing pot after rake, or lose the call.
+near(K.callPayout(150,100,3),1.47);near(K.callPayout(150,100),1.5);assert(Number.isNaN(K.callPayout(150,0)));assert(Number.isNaN(K.callPayout(150,10,-1)));
+
 // Deployment copy must match the source files.
-for(const f of ['index.html','zh.html','app.js','poker.js','language.js','style.css'])assert.equal(fs.readFileSync(path.join(__dirname,'public',f),'utf8'),fs.readFileSync(path.join(__dirname,f),'utf8'),`public/${f} is out of date`);
-assert.deepEqual(fs.readdirSync(path.join(__dirname,'public')).sort(),['app.js','index.html','language.js','poker.js','style.css','zh.html']);
-console.log('Evaluator, ranges, exact enumeration and sampling checks: passed',{flopExact:ex.equity.toFixed(4),flopTop15:exR.equity.toFixed(4),AA:aa.equity.toFixed(3),JJ:jj.equity.toFixed(3)});
+for(const f of ['index.html','zh.html','app.js','poker.js','kelly.js','kelly-ui.js','language.js','style.css'])assert.equal(fs.readFileSync(path.join(__dirname,'public',f),'utf8'),fs.readFileSync(path.join(__dirname,f),'utf8'),`public/${f} is out of date`);
+assert.deepEqual(fs.readdirSync(path.join(__dirname,'public')).sort(),['app.js','index.html','kelly-ui.js','kelly.js','language.js','poker.js','style.css','zh.html']);
+console.log('Evaluator, ranges, enumeration, sampling and Kelly checks: passed',{flopExact:ex.equity.toFixed(4),flopTop15:exR.equity.toFixed(4),AA:aa.equity.toFixed(3),JJ:jj.equity.toFixed(3)});

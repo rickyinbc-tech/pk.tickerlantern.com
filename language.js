@@ -1,7 +1,7 @@
 // Preserve the current hand when moving between language versions in this tab.
 const languageKey='poker-lantern-hand';
 document.querySelectorAll('.languages a').forEach(link=>link.addEventListener('click',()=>{
- const values={};document.querySelectorAll('.setup input[id]:not(.quick),.setup select[id]').forEach(el=>values[el.id]=el.value);
+ const values={};document.querySelectorAll('.setup input[id]:not(.quick),.setup select[id],.kelly input[id]').forEach(el=>values[el.id]=el.value);
  values.hole=[...document.querySelectorAll('#hole select')].map(el=>el.value);
  values.board=[...document.querySelectorAll('#board select')].map(el=>el.value);
  try{sessionStorage.setItem(languageKey,JSON.stringify(values))}catch{}

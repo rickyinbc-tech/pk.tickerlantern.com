@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Poker Lantern UI tests</title></head>
+<body><pre id="result">running</pre><iframe id="frame" style="width:1200px;height:900px"></iframe>
+<script>
+// Drives the real pages (served from public/) in an iframe and reports results for test-ui.js.
+const frame=document.getElementById('frame'),results=[];
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function load(url){return new Promise(res=>{frame.onload=()=>res(frame.contentWindow);frame.src=url})}
+async function until(fn,ms=60000){const t=Date.now();while(Date.now()-t<ms){const v=fn();if(v)return v;await sleep(50)}throw Error('timeout waiting for condition')}
+function check(name,cond,info=''){results.push({name,ok:!!cond,info:cond?'':String(info)})}
+let w,d;const $=id=>d.getElementById(id);
+const set=(id,v,ev='change')=>{$(id).value=v;$(id).dispatchEvent(new w.Event(ev,{bubbles:true}))};
+const txt=id=>$(id).textContent;
+async function page(url){w=await load(url);d=w.document;await until(()=>w.Kelly&&$('kFull')&&txt('kFull'))}
+async function analyze(){$('calculate').click();await until(()=>!$('output').hidden||txt('error'))}
+
+async function run(){
+ /* ---------- English: calculator ---------- */
+ await page('/index.html');
+ check('default Kelly fraction 10.0% (p 55%, b 1)',txt('kFull')==='10.0%',txt('kFull'));
+ check('default table has 4 strategies',$('kTable').rows.length===5&&!$('kTable').hidden,$('kTable').rows.length);
+ check('full Kelly stake 200 of 2,000',$('kTable').rows[3].cells[2].textContent==='200',$('kTable').rows[3].cells[2].textContent);
+ check('classical formula shown',txt('kFormula').startsWith('f* = (b × p − q) ÷ b'),txt('kFormula'));
+ check('worked example substitutes numbers',txt('kWorked').includes('(1 × 0.55 − 0.45) ÷ 1 = 0.1'),txt('kWorked'));
+ check('2× Kelly row labelled as overbet',$('kTable').rows[4].cells[0].textContent.includes('overbet'));
+ set('kP','40','input');
+ check('negative edge stakes nothing',txt('kFull')==='0.0%'&&txt('kVerdict').startsWith('No edge')&&$('kTable').hidden,txt('kVerdict'));
+ check('negative edge shows break-even 50.0%',txt('kVerdict').includes('50.0%'),txt('kVerdict'));
+ set('kP','50','input');check('zero edge stakes nothing',txt('kFull')==='0.0%'&&txt('kWorked').includes('stake nothing'),txt('kWorked'));
+ set('kP','100','input');check('certain win warns about ruin',txt('kFull')==='100.0%'&&txt('kVerdict').includes('ruinous'),txt('kVerdict'));
+ set('kP','50','input');set('kPush','20','input');
+ check('push-aware Kelly 25.0%',txt('kFull')==='25.0%',txt('kFull'));check('push formula shown',txt('kFormula').includes('(p + l)'),txt('kFormula'));
+ set('kP','0','input');set('kPush','100','input');check('all-push case has no unique fraction',txt('kFull')==='—'&&txt('kWorked').includes('no unique Kelly fraction')&&!txt('kWorked').includes('÷'),txt('kWorked'));
+ set('kP','50','input');set('kPush','60','input');check('p + push > 100% rejected',txt('kError').includes('more than 100%')&&txt('kFull')==='',txt('kError'));
+ set('kPush','0','input');set('kB','0','input');check('b = 0 rejected',txt('kError').includes('greater than zero'),txt('kError'));
+ set('kB','','input');check('blank b rejected',txt('kError').length>0);
+ set('kB','1','input');set('kBankroll','-5','input');check('negative bankroll rejected',txt('kError').includes('bankroll'),txt('kError'));
+ set('kBankroll','2000','input');set('kP','60','input');set('kCap','250','input');
+ check('table-stack cap limits the shown stake',$('kTable').rows[3].cells[2].textContent.includes('capped at 250'),$('kTable').rows[3].cells[2].textContent);
+ check('cap does not change the Kelly fraction',txt('kFull')==='20.0%',txt('kFull'));
+ check('quarter Kelly under the cap is not capped',$('kTable').rows[1].cells[2].textContent==='100',$('kTable').rows[1].cells[2].textContent);
+ set('kCap','-1','input');check('negative cap rejected',txt('kError').includes('cap'),txt('kError'));set('kCap','','input');
+ check('sensitivity line shown',txt('kSensitivity').includes('5 points lower'),txt('kSensitivity'));
+
+ /* ---------- English: link to hand results ---------- */
+ check('import disabled before any analysis',$('kImport').disabled&&txt('kImportHint').includes('Analyze'),txt('kImportHint'));
+ await analyze();
+ check('hand analysis still works',!$('output').hidden&&txt('action').length>0,txt('error'));
+ check('no bet to call keeps import disabled',$('kImport').disabled&&txt('kImportHint').includes('fixed price'),txt('kImportHint'));
+ set('kP','55','input');set('kB','1','input');
+ set('holeText','Js Jh');set('boardText','Qd 7c 2s');set('pot','150');set('call','100');set('stack','100');set('range','20');set('bb','2');
+ await analyze();
+ check('analysis alone does not change Kelly inputs',$('kP').value==='55'&&$('kB').value==='1',$('kP').value+' '+$('kB').value);
+ check('import enabled when facing a bet',!$('kImport').disabled);
+ $('kImport').click();
+ const winTie=txt('winTie').split(' / '),eq=txt('equity');
+ check('p imported from outright win, not equity',Math.abs(parseFloat($('kP').value)-parseFloat(winTie[0]))<.06&&$('kP').value!==String(parseFloat(eq)),`${$('kP').value} vs win ${winTie[0]}, equity ${eq}`);
+ check('b = pot ÷ call = 1.5',$('kB').value==='1.5',$('kB').value);
+ const note=txt('kImportNote');
+ check('note shows win, tie and equity separately',note.includes('outright win')&&note.includes('tie')&&note.includes('showdown equity'),note);
+ check('note says ties count as losses',note.includes('Ties')&&note.includes('counted as losses'),note);
+ check('note says a partial call is impossible',note.includes('cannot call part of a bet'),note);
+ check('note states all-in payout assumption',note.includes('all-in'),note);
+ check('exposure line compares the call with the bankroll',!$('kExposure').hidden&&txt('kExposure').includes('100 = 5.00%'),txt('kExposure'));
+ set('kBankroll','150','input');check('exposure above full Kelly is not a partial-call suggestion',txt('kExposure').includes('does not mean you can call a smaller amount'),txt('kExposure'));
+ set('kBankroll','2000','input');
+ set('call','50');
+ check('changing the hand marks the example as stale',txt('kImportNote').includes('changed since'),txt('kImportNote'));
+ check('changing the hand disables import',$('kImport').disabled);
+ $('kRemove').click();check('remove example hides note and exposure',$('kImportNote').hidden&&$('kExposure').hidden);
+ set('stack','200');set('call','50');set('pot','100');await analyze();$('kImport').click();
+ check('not-all-in warning shown',txt('kImportNote').includes('not all-in'),txt('kImportNote'));
+ set('rake','5');set('rakeCap','3');await analyze();$('kImport').click();
+ check('rake reduces b: (100 − 3) ÷ 50 = 1.94',$('kB').value==='1.94',$('kB').value);
+ set('opponents','3');set('range','100');await analyze();$('kImport').click();
+ check('multiway warning shown',txt('kImportNote').includes('several opponents'),txt('kImportNote'));
+ check('simulation uncertainty shown',txt('kImportNote').includes('sampling error'),txt('kImportNote'));
+
+ /* ---------- Language switch keeps Kelly inputs ---------- */
+ set('kBankroll','5000','input');set('kP','58','input');
+ const loaded=new Promise(res=>frame.onload=res);d.querySelector('.languages a[href="zh.html"]').click();await loaded;
+ w=frame.contentWindow;d=w.document;await until(()=>w.Kelly&&txt('kFull'));
+ check('language switch keeps the bankroll',$('kBankroll').value==='5000',$('kBankroll').value);
+ check('language switch keeps p',$('kP').value==='58',$('kP').value);
+
+ /* ---------- Traditional Chinese ---------- */
+ await page('/zh.html');
+ check('zh default Kelly 10.0%',txt('kFull')==='10.0%',txt('kFull'));
+ check('zh classical formula',txt('kFormula').includes('其中 q = 1 − p'),txt('kFormula'));
+ check('zh table headings translated',$('kTable').rows[0].cells[0].textContent==='策略');
+ set('kP','40','input');check('zh negative edge',txt('kVerdict').startsWith('沒有優勢'),txt('kVerdict'));
+ set('kP','0','input');set('kPush','100','input');check('zh all-push case has no unique fraction',txt('kFull')==='—'&&txt('kWorked').includes('沒有唯一的凱利比例'),txt('kWorked'));
+ set('kP','60','input');set('kPush','50','input');check('zh validation message',txt('kError').includes('不可超過 100%'),txt('kError'));
+ set('kP','55','input');set('kPush','0','input');
+ check('zh import disabled before analysis',$('kImport').disabled&&txt('kImportHint').includes('請先分析'),txt('kImportHint'));
+ set('holeText','Js Jh');set('boardText','Qd 7c 2s');set('pot','150');set('call','100');set('stack','100');set('range','20');
+ await analyze();$('kImport').click();
+ const zn=txt('kImportNote');
+ check('zh note: win/tie/equity separately',zn.includes('獨贏')&&zn.includes('平手')&&zn.includes('攤牌權益'),zn);
+ check('zh note: no partial call',zn.includes('不能只跟注一部分'),zn);
+ check('zh exposure line',txt('kExposure').includes('撲克資金'),txt('kExposure'));
+ check('zh teaching section present',d.querySelector('.kelly-teach').textContent.includes('權益不等於勝出機率'));
+ check('no untranslated English in zh Kelly output',!/[A-Za-z]{4,}/.test(txt('kVerdict')+txt('kExposure')+zn.replace(/Kelly|Wiley|Online|Library/g,'')),txt('kVerdict'));
+}
+run().catch(e=>results.push({name:'harness error',ok:false,info:e.stack||String(e)})).finally(()=>{document.getElementById('result').textContent='RESULTS:'+JSON.stringify(results)});
+</script></body></html>
