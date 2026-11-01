@@ -314,7 +314,11 @@ $('calculate').addEventListener('click',()=>{for(const id of ['hole','board'])if
 setExample();
 // First analysis once every section (Kelly, bet comparison, language restore) has attached its listeners.
 document.addEventListener('DOMContentLoaded',()=>{if(timer===null&&!running&&shownKey===null)update()});
-window.PokerLanternState={idle:()=>timer===null&&!running,cacheSize:()=>cache.size,shownKey:()=>shownKey,setTestDelay:ms=>{testDelay=ms}};
+window.PokerLanternState={idle:()=>timer===null&&!running,cacheSize:()=>cache.size,shownKey:()=>shownKey,setTestDelay:ms=>{testDelay=ms},
+ // Carry only a completed result to the other language in this tab; incomplete edits never carry stale odds.
+ probabilitySnapshot:()=>timer===null&&!running&&shownKey&&cache.has(shownKey)?{key:shownKey,result:cache.get(shownKey)}:null,
+ restoreProbability:s=>{const st=readState();if(st.kind==='ok'&&s&&s.key===probKey(st.x)&&s.result&&Array.isArray(s.result.categories)&&Number.isFinite(s.result.equity)&&Number.isFinite(s.result.wins)&&Number.isFinite(s.result.ties))cache.set(s.key,s.result)}
+};
 
 function show(r,x,reused){
  const {equity:e,wins,ties,se,trials,exact,categories}=r,{hole,board,bb,stack,pot,call,opponents,position,range}=x;

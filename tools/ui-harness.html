@@ -334,6 +334,13 @@ async function run(){
  w=frame.contentWindow;d=w.document;watch();await until(()=>w.Kelly&&w.PokerLanternState);await settle();
  check('switch back: recalculated and resynced',mode()==='synced'&&!$('output').hidden&&$('pot').value==='150'&&$('kBankroll').value==='5000',handView());
 
+ // A language switch must not introduce sampling noise for exactly the same hand.
+ set('boardText','');set('call','0');set('opponents','4');await settle();
+ const beforeLanguageOdds=txt('winTie')+'|'+txt('equity');
+ loaded=new Promise(res=>frame.onload=res);d.querySelector('.languages a[href="zh.html"]').click();await loaded;
+ w=frame.contentWindow;d=w.document;watch();await until(()=>w.PokerLanternState);await settle();
+ check('switch keeps identical simulated win, tie and equity',txt('winTie')+'|'+txt('equity')===beforeLanguageOdds,beforeLanguageOdds+' / '+txt('winTie')+'|'+txt('equity'));
+
  /* ---------- Traditional Chinese ---------- */
  await page('/zh.html');
  check('zh default Kelly 10.0%',txt('kFull')==='10.0%',txt('kFull'));
